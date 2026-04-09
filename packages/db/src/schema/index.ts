@@ -31,6 +31,8 @@ export const businesses = pgTable('businesses', {
   website: text('website'),
   googleRating: real('google_rating'),
   googleReviewCount: integer('google_review_count'),
+  avgRating: real('avg_rating'),
+  reviewCount: integer('review_count'),
   isTracked: boolean('is_tracked').notNull().default(false),
   isCustomer: boolean('is_customer').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
