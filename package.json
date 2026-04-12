@@ -24,5 +24,8 @@
   },
   "devDependencies": {
     "eslint-config-prettier": "^10.1.8"
+  },
+  "dependencies": {
+    "proxy-agent": "^8.0.1"
   }
 }

@@ -16,7 +16,7 @@ export async function handleScrapeJob(job: Job<ScrapeJobData>) {
   console.info(`[scrape] Starting for business ${businessId} (place: ${googlePlaceId})`);
 
   // 1. Run Apify Google Maps Reviews scraper
-  const run = await apify.actor('Xb8osYTtOjlsgI6k9').call({
+  const run = await apify.actor('nwua9Gu5YrADL7ZDj').call({
     startUrls: [{ url: `https://www.google.com/maps/place/?q=place_id:${googlePlaceId}` }],
     maxReviews,
     language: 'en',
@@ -28,13 +28,17 @@ export async function handleScrapeJob(job: Job<ScrapeJobData>) {
   console.info(`[scrape] Fetched ${items.length} reviews for business ${businessId}`);
 
   // 3. Normalize and store reviews
-  const reviews = items.map((item: Record<string, unknown>) => ({
+  const firstItem = items[0] as Record<string, unknown> | undefined;
+  const nestedReviews = firstItem && Array.isArray(firstItem.reviews) ? firstItem.reviews : null;
+  const reviewSource = (nestedReviews ?? items) as Record<string, unknown>[];
+
+  const reviews = reviewSource.map((item: Record<string, unknown>, index: number) => ({
     business_id: businessId,
-    google_review_id: item.reviewId as string,
-    author_name: item.name as string,
-    rating: item.stars as number,
+    google_review_id: (item.reviewId as string) || `${googlePlaceId}-review-${index}`,
+    author_name: (item.name as string) || 'Anonymous',
+    rating: (item.stars as number) || 0,
     text: item.text as string,
-    published_at: item.publishedAtDate as string,
+    published_at: (item.publishedAtDate as string) || (item.publishedAt as string) || null,
     raw_data: item,
   }));
 
