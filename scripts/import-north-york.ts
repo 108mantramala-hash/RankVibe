@@ -20,11 +20,21 @@ try {
 
 const SUPABASE_URL = envVars.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = envVars.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const DATA_FILE = path.join(
-  process.env.HOME!,
-  'Downloads',
-  'dataset_crawler-google-places-task-1_2026-04-12_02-10-55-153.json'
-);
+// Accept file path as CLI arg or fall back to default
+// Usage: tsx scripts/import-north-york.ts /path/to/dataset.json
+const DATA_FILE =
+  process.argv[2] ??
+  path.join(
+    process.env.HOME!,
+    'Downloads',
+    'dataset_crawler-google-places-task-1_2026-04-12_02-10-55-153.json'
+  );
+
+if (!fs.existsSync(DATA_FILE)) {
+  console.error(`❌ File not found: ${DATA_FILE}`);
+  console.error('Usage: tsx scripts/import-north-york.ts /path/to/dataset.json');
+  process.exit(1);
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 

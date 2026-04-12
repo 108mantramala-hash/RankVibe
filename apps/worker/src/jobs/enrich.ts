@@ -1,4 +1,5 @@
 import { Job } from 'bullmq';
+import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
 interface EnrichJobData {
@@ -12,39 +13,95 @@ const SYSTEM_PROMPT = `You are a review analysis engine for local businesses.
 Given a customer review, extract:
 1. sentiment: "positive", "negative", or "neutral"
 2. themes: array of short theme tags (e.g., "wait time", "fade quality", "friendly staff", "cleanliness")
-3. summary: one-sentence summary of the review
+3. ai_reply_suggestion: a professional, concise reply suggestion (1-2 sentences) for the business owner
 
 Respond in JSON only:
-{"sentiment": "...", "themes": [...], "summary": "..."}`;
+{"sentiment": "...", "themes": [...], "ai_reply_suggestion": "..."}`;
 
-export async function handleEnrichJob(job: Job<EnrichJobData>) {
-  const { businessId, reviewIds } = job.data;
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
-  console.info(`[enrich] Processing ${reviewIds.length} reviews for business ${businessId}`);
-
-  // TODO: Fetch review texts from DB via @rankvibe/db
-  // const reviews = await db.reviews.getByIds(reviewIds);
-
-  // Placeholder — in production, loop over actual reviews
-  const sampleReview = 'Great fade, but had to wait 40 minutes. Staff was super friendly though.';
-
+async function analyzeReview(text: string) {
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: sampleReview },
+      { role: 'user', content: text },
     ],
     response_format: { type: 'json_object' },
     temperature: 0.2,
   });
 
-  const result = JSON.parse(completion.choices[0].message.content || '{}');
+  const content = completion.choices[0].message.content;
+  if (!content) throw new Error('Empty OpenAI response');
 
-  console.info(`[enrich] Result:`, result);
-  // → { sentiment: "positive", themes: ["fade quality", "wait time", "friendly staff"], summary: "..." }
+  const parsed = JSON.parse(content);
+  return {
+    sentiment: parsed.sentiment as 'positive' | 'negative' | 'neutral',
+    themes: Array.isArray(parsed.themes) ? parsed.themes : [],
+    summary: parsed.ai_reply_suggestion || '',
+  };
+}
 
-  // TODO: Store enrichment results in DB
-  // await db.reviewInsights.upsert({ reviewId, ...result });
+export async function handleEnrichJob(job: Job<EnrichJobData>) {
+  const { businessId, reviewIds } = job.data;
+  const supabase = getSupabase();
 
-  return { processed: reviewIds.length };
+  console.info(`[enrich] Processing ${reviewIds.length} reviews for business ${businessId}`);
+
+  // 1. Fetch review texts from Supabase
+  const { data: reviews, error } = await supabase
+    .from('reviews')
+    .select('id, text')
+    .in('google_review_id', reviewIds)
+    .is('sentiment', null)
+    .not('text', 'is', null);
+
+  if (error) {
+    throw new Error(`Failed to fetch reviews: ${error.message}`);
+  }
+
+  if (!reviews || reviews.length === 0) {
+    console.info(`[enrich] No unenriched reviews found for business ${businessId}`);
+    return { processed: 0 };
+  }
+
+  let processed = 0;
+  let failed = 0;
+
+  await job.updateProgress(10);
+
+  // 2. Enrich each review
+  for (let i = 0; i < reviews.length; i++) {
+    const review = reviews[i];
+    try {
+      const result = await analyzeReview(review.text!);
+
+      await supabase
+        .from('reviews')
+        .update({
+          sentiment: result.sentiment,
+          themes: result.themes,
+          summary: result.summary,
+        })
+        .eq('id', review.id);
+
+      processed++;
+    } catch (err) {
+      console.error(`[enrich] Failed review ${review.id}:`, err instanceof Error ? err.message : err);
+      failed++;
+    }
+
+    // Update progress
+    await job.updateProgress(10 + Math.round((i / reviews.length) * 85));
+  }
+
+  await job.updateProgress(100);
+
+  console.info(`[enrich] ✓ ${processed} enriched, ${failed} failed for business ${businessId}`);
+  return { processed, failed };
 }

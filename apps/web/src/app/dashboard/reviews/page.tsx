@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase-server';
 
-export const revalidate = 0;
+export const revalidate = 1800;
 
 type SentimentFilter = 'all' | 'positive' | 'negative' | 'neutral';
 

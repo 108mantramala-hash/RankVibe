@@ -1,10 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { scrapeNorthYorkBarbershops } from '@/services/bulk-scraper';
+import { checkAdminAuth } from '@/lib/admin-auth';
 
 export const maxDuration = 300; // 5 minutes for scraping
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = checkAdminAuth(req);
+  if (denied) return denied;
   try {
     console.log('\n========================================');
     console.log('🚀 NORTH YORK BARBERSHOP BULK SCRAPE');

@@ -1,6 +1,7 @@
 import { createServerClient } from '@/lib/supabase-server';
 
-export const revalidate = 0;
+// Revalidate every 30 minutes — dashboard data doesn't need to be real-time
+export const revalidate = 1800;
 
 async function getDashboardData() {
   const supabase = createServerClient();
