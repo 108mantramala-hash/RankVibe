@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -140,7 +140,7 @@ function QrCard({
             value={reviewUrl}
             size={140}
             level="M"
-            includeMargin={false}
+            marginSize={0}
           />
         </div>
       </div>
@@ -193,7 +193,7 @@ function AddQrModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     setError('');
