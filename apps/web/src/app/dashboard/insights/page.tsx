@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase-server';
 
-export const revalidate = 1800;
+export const revalidate = 0; // Always fresh — snapshots are infrequent, stale data is confusing
 
 async function getInsightsData() {
   const supabase = createServerClient();
