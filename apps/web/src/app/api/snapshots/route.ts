@@ -1,8 +1,8 @@
 /**
- * POST /api/snapshots
+ * GET /api/snapshots
  * Takes a weekly snapshot of all business metrics.
- * Call this weekly via a cron job (Vercel Cron or external scheduler).
- * Protected by CRON_SECRET header.
+ * Called by Vercel Cron every Sunday midnight, or manually.
+ * Protected by CRON_SECRET via Authorization header.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,10 +10,16 @@ import { createServerClient } from '@/lib/supabase-server';
 
 export const maxDuration = 300;
 
-export async function POST(req: NextRequest) {
-  // Auth guard — must be called with secret header
-  const secret = req.headers.get('x-cron-secret');
-  if (secret !== process.env.CRON_SECRET) {
+export async function GET(req: NextRequest) {
+  // Auth guard — Vercel Cron sends Authorization: Bearer <secret>
+  const authHeader = req.headers.get('authorization');
+  const cronSecret = req.headers.get('x-cron-secret');
+  const token = authHeader?.replace('Bearer ', '');
+
+  const isAuthorized =
+    token === process.env.CRON_SECRET || cronSecret === process.env.CRON_SECRET;
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
