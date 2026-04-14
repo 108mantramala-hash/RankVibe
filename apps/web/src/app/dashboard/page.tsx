@@ -1,19 +1,38 @@
 import { createServerClient } from '@/lib/supabase-server';
 
-// Revalidate every 30 minutes — dashboard data doesn't need to be real-time
 export const revalidate = 1800;
 
 async function getDashboardData() {
   const supabase = createServerClient();
 
-  const [{ data: reviews }, { data: businesses }] = await Promise.all([
-    supabase.from('reviews').select('id, rating, sentiment, themes, business_id'),
-    supabase.from('businesses').select('id, name, google_rating, google_review_count'),
+  // Scope to the customer business (Outkasts Barbershop)
+  const { data: businesses } = await supabase
+    .from('businesses')
+    .select('id, name, google_rating, google_review_count')
+    .eq('is_customer', true)
+    .limit(1);
+
+  const business = businesses?.[0] ?? null;
+  if (!business) return null;
+
+  const [{ data: reviews }, { data: snapshots }, { data: allBusinesses }] = await Promise.all([
+    supabase
+      .from('reviews')
+      .select('id, rating, sentiment, themes')
+      .eq('business_id', business.id),
+    supabase
+      .from('review_snapshots')
+      .select('avg_rating, review_count, review_velocity, positive_count, negative_count, snapshot_date')
+      .eq('business_id', business.id)
+      .order('snapshot_date', { ascending: false })
+      .limit(8),
+    // For competitor rank calculation
+    supabase
+      .from('businesses')
+      .select('id, google_rating, google_review_count'),
   ]);
 
   const totalReviews = reviews?.length ?? 0;
-  const totalBusinesses = businesses?.length ?? 0;
-
   const avgRating =
     totalReviews > 0
       ? (reviews!.reduce((s, r) => s + (r.rating ?? 0), 0) / totalReviews).toFixed(2)
@@ -35,37 +54,86 @@ async function getDashboardData() {
   }
   const topThemes = Object.entries(themeCount)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 12);
+    .slice(0, 10);
 
-  // Top businesses by review count (min 5 reviews)
-  const bizMap: Record<string, { name: string; count: number; ratingSum: number; positive: number }> = {};
-  for (const r of reviews ?? []) {
-    if (!bizMap[r.business_id]) {
-      const biz = businesses?.find((b) => b.id === r.business_id);
-      bizMap[r.business_id] = { name: biz?.name ?? 'Unknown', count: 0, ratingSum: 0, positive: 0 };
-    }
-    bizMap[r.business_id].count++;
-    bizMap[r.business_id].ratingSum += r.rating ?? 0;
-    if (r.sentiment === 'positive') bizMap[r.business_id].positive++;
-  }
+  // Competitor rank by review count
+  const sorted = (allBusinesses ?? [])
+    .filter((b) => (b.google_review_count ?? 0) > 0)
+    .sort((a, b) => (b.google_review_count ?? 0) - (a.google_review_count ?? 0));
+  const rank = sorted.findIndex((b) => b.id === business.id) + 1;
 
-  const topBusinesses = Object.values(bizMap)
-    .filter((b) => b.count >= 5)
-    .map((b) => ({
-      name: b.name,
-      count: b.count,
-      avgRating: parseFloat((b.ratingSum / b.count).toFixed(1)),
-      positiveRate: Math.round((b.positive / b.count) * 100),
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
+  // Velocity trend from snapshots
+  const latestSnap = snapshots?.[0] ?? null;
+  const prevSnap = snapshots?.[1] ?? null;
+  const ratingTrend =
+    latestSnap && prevSnap
+      ? parseFloat((latestSnap.avg_rating - prevSnap.avg_rating).toFixed(2))
+      : 0;
 
-  return { totalReviews, totalBusinesses, avgRating, positive, negative, neutral, enriched, topThemes, topBusinesses };
+  return {
+    business,
+    totalReviews,
+    avgRating,
+    positive,
+    negative,
+    neutral,
+    enriched,
+    topThemes,
+    rank,
+    totalCompetitors: sorted.length,
+    latestSnap,
+    ratingTrend,
+  };
+}
+
+function StatCard({
+  label,
+  value,
+  sub,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  sub: string;
+  color?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+      <p className="text-sm text-[var(--muted)]">{label}</p>
+      <p className={`text-3xl font-bold mt-1 ${color ?? ''}`}>{value}</p>
+      <p className="text-sm text-[var(--muted)] mt-1">{sub}</p>
+    </div>
+  );
 }
 
 export default async function DashboardPage() {
-  const { totalReviews, totalBusinesses, avgRating, positive, negative, neutral, enriched, topThemes, topBusinesses } =
-    await getDashboardData();
+  const data = await getDashboardData();
+
+  if (!data) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Overview</h1>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-12 text-center">
+          <p className="text-sm text-[var(--muted)]">No customer business configured in Supabase.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const {
+    business,
+    totalReviews,
+    avgRating,
+    positive,
+    negative,
+    neutral,
+    enriched,
+    topThemes,
+    rank,
+    totalCompetitors,
+    latestSnap,
+    ratingTrend,
+  } = data;
 
   const positiveRate = enriched > 0 ? Math.round((positive / enriched) * 100) : 0;
   const negativeRate = enriched > 0 ? Math.round((negative / enriched) * 100) : 0;
@@ -75,103 +143,97 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Overview</h1>
-        <p className="text-[var(--muted)] mt-1">North York barbershop intelligence — live from Supabase.</p>
+        <p className="text-[var(--muted)] mt-1">{business.name}</p>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-          <p className="text-sm text-[var(--muted)]">Businesses Tracked</p>
-          <p className="text-3xl font-bold mt-1">{totalBusinesses}</p>
-          <p className="text-sm text-[var(--muted)] mt-1">North York area</p>
-        </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-          <p className="text-sm text-[var(--muted)]">Total Reviews</p>
-          <p className="text-3xl font-bold mt-1">{totalReviews.toLocaleString()}</p>
-          <p className="text-sm text-[var(--muted)] mt-1">{enriched.toLocaleString()} enriched</p>
-        </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-          <p className="text-sm text-[var(--muted)]">Avg Google Rating</p>
-          <p className="text-3xl font-bold mt-1">{avgRating} ⭐</p>
-          <p className="text-sm text-[var(--muted)] mt-1">across all businesses</p>
-        </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-          <p className="text-sm text-[var(--muted)]">Positive Sentiment</p>
-          <p className="text-3xl font-bold mt-1 text-green-600">{positiveRate}%</p>
-          <p className="text-sm text-[var(--muted)] mt-1">{positive.toLocaleString()} reviews</p>
-        </div>
+        <StatCard
+          label="Total Reviews"
+          value={totalReviews.toLocaleString()}
+          sub={`${enriched.toLocaleString()} enriched`}
+        />
+        <StatCard
+          label="Avg Rating"
+          value={`${avgRating} ⭐`}
+          sub={
+            ratingTrend !== 0
+              ? `${ratingTrend > 0 ? '▲' : '▼'} ${Math.abs(ratingTrend)} vs last snapshot`
+              : 'No trend data yet'
+          }
+        />
+        <StatCard
+          label="Positive Sentiment"
+          value={`${positiveRate}%`}
+          sub={`${positive.toLocaleString()} reviews`}
+          color="text-green-600"
+        />
+        <StatCard
+          label="Competitor Rank"
+          value={rank > 0 ? `#${rank}` : '—'}
+          sub={`out of ${totalCompetitors} North York shops`}
+          color="text-brand-600"
+        />
       </div>
+
+      {/* Velocity from latest snapshot */}
+      {latestSnap && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+            <p className="text-sm text-[var(--muted)]">New Reviews (last snapshot)</p>
+            <p className="text-3xl font-bold mt-1 text-brand-600">
+              +{latestSnap.review_velocity ?? 0}
+            </p>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+            <p className="text-sm text-[var(--muted)]">Positive (last snapshot)</p>
+            <p className="text-3xl font-bold mt-1 text-green-600">{latestSnap.positive_count}</p>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+            <p className="text-sm text-[var(--muted)]">Negative (last snapshot)</p>
+            <p className="text-3xl font-bold mt-1 text-red-500">{latestSnap.negative_count}</p>
+          </div>
+        </div>
+      )}
 
       {/* Sentiment breakdown */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
         <h2 className="text-base font-semibold mb-4">Sentiment Breakdown</h2>
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <span className="text-sm w-16 text-green-600 font-medium">Positive</span>
-            <div className="flex-1 bg-[var(--border)] rounded-full h-3 overflow-hidden">
-              <div className="bg-green-500 h-3 rounded-full" style={{ width: `${positiveRate}%` }} />
+          {[
+            { label: 'Positive', rate: positiveRate, count: positive, color: 'bg-green-500', textColor: 'text-green-600' },
+            { label: 'Neutral', rate: neutralRate, count: neutral, color: 'bg-slate-400', textColor: 'text-[var(--muted)]' },
+            { label: 'Negative', rate: negativeRate, count: negative, color: 'bg-red-500', textColor: 'text-red-500' },
+          ].map((row) => (
+            <div key={row.label} className="flex items-center gap-3">
+              <span className={`text-sm w-16 font-medium ${row.textColor}`}>{row.label}</span>
+              <div className="flex-1 bg-[var(--border)] rounded-full h-3 overflow-hidden">
+                <div className={`${row.color} h-3 rounded-full`} style={{ width: `${row.rate}%` }} />
+              </div>
+              <span className="text-sm text-[var(--muted)] w-24 text-right">
+                {row.count.toLocaleString()} ({row.rate}%)
+              </span>
             </div>
-            <span className="text-sm text-[var(--muted)] w-20 text-right">{positive.toLocaleString()} ({positiveRate}%)</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm w-16 text-[var(--muted)] font-medium">Neutral</span>
-            <div className="flex-1 bg-[var(--border)] rounded-full h-3 overflow-hidden">
-              <div className="bg-slate-400 h-3 rounded-full" style={{ width: `${neutralRate}%` }} />
-            </div>
-            <span className="text-sm text-[var(--muted)] w-20 text-right">{neutral.toLocaleString()} ({neutralRate}%)</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm w-16 text-red-500 font-medium">Negative</span>
-            <div className="flex-1 bg-[var(--border)] rounded-full h-3 overflow-hidden">
-              <div className="bg-red-500 h-3 rounded-full" style={{ width: `${negativeRate}%` }} />
-            </div>
-            <span className="text-sm text-[var(--muted)] w-20 text-right">{negative.toLocaleString()} ({negativeRate}%)</span>
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top themes */}
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-          <h2 className="text-base font-semibold mb-4">Top Themes</h2>
-          <div className="flex flex-wrap gap-2">
-            {topThemes.map(([theme, count]) => (
-              <span
-                key={theme}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-brand-50 text-brand-700 border border-brand-100"
-              >
-                {theme}
-                <span className="font-semibold text-brand-500">{count}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Top businesses */}
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-          <h2 className="text-base font-semibold mb-4">Most Reviewed</h2>
-          <div className="space-y-3">
-            {topBusinesses.map((biz, i) => (
-              <div key={biz.name} className="flex items-center gap-3">
-                <span className="text-sm text-[var(--muted)] w-4">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{biz.name}</p>
-                  <p className="text-xs text-[var(--muted)]">{biz.count} reviews · {biz.avgRating}⭐</p>
-                </div>
-                <span
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    biz.positiveRate >= 75
-                      ? 'bg-green-100 text-green-700'
-                      : biz.positiveRate >= 50
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-red-100 text-red-700'
-                  }`}
-                >
-                  {biz.positiveRate}% pos
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* Top themes */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
+        <h2 className="text-base font-semibold mb-4">Top Review Themes</h2>
+        <div className="flex flex-wrap gap-2">
+          {topThemes.map(([theme, count]) => (
+            <span
+              key={theme}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-brand-50 text-brand-700 border border-brand-100"
+            >
+              {theme}
+              <span className="font-semibold text-brand-500">{count}</span>
+            </span>
+          ))}
+          {topThemes.length === 0 && (
+            <p className="text-sm text-[var(--muted)]">No themes yet — enrich some reviews first.</p>
+          )}
         </div>
       </div>
     </div>

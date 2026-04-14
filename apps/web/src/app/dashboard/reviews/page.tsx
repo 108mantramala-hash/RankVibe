@@ -7,30 +7,46 @@ type SentimentFilter = 'all' | 'positive' | 'negative' | 'neutral';
 async function getReviews(sentiment: SentimentFilter) {
   const supabase = createServerClient();
 
-  let query = supabase
-    .from('reviews')
-    .select('id, author_name, rating, text, sentiment, themes, published_at, business_id')
-    .not('text', 'is', null)
-    .order('published_at', { ascending: false })
-    .limit(100);
+  // Scope to the customer business
+  const { data: businesses } = await supabase
+    .from('businesses')
+    .select('id, name')
+    .eq('is_customer', true)
+    .limit(1);
 
-  if (sentiment !== 'all') {
-    query = query.eq('sentiment', sentiment);
-  }
+  const business = businesses?.[0] ?? null;
+  if (!business) return { reviews: [], business: null };
 
-  const [{ data: reviews }, { data: businesses }] = await Promise.all([
-    query,
-    supabase.from('businesses').select('id, name'),
+  // Also fetch barbers for name lookup
+  const [reviewResult, barberResult] = await Promise.all([
+    (() => {
+      let q = supabase
+        .from('reviews')
+        .select('id, author_name, rating, text, sentiment, themes, published_at, barber_id')
+        .eq('business_id', business.id)
+        .not('text', 'is', null)
+        .order('published_at', { ascending: false })
+        .limit(100);
+      if (sentiment !== 'all') q = q.eq('sentiment', sentiment);
+      return q;
+    })(),
+    supabase
+      .from('barbers')
+      .select('id, name, color')
+      .eq('business_id', business.id),
   ]);
 
-  const bizName: Record<string, string> = {};
-  for (const b of businesses ?? []) bizName[b.id] = b.name;
+  const barberMap: Record<string, { name: string; color: string | null }> = {};
+  for (const b of barberResult.data ?? []) barberMap[b.id] = { name: b.name, color: b.color };
 
-  return (reviews ?? []).map((r) => ({
-    ...r,
-    businessName: bizName[r.business_id] ?? 'Unknown',
-    themes: (r.themes as string[]) ?? [],
-  }));
+  return {
+    business,
+    reviews: (reviewResult.data ?? []).map((r) => ({
+      ...r,
+      themes: (r.themes as string[]) ?? [],
+      barber: r.barber_id ? barberMap[r.barber_id] : null,
+    })),
+  };
 }
 
 const sentimentStyles = {
@@ -55,7 +71,7 @@ export default async function ReviewsPage({
 }) {
   const params = await searchParams;
   const sentiment = (params.sentiment ?? 'all') as SentimentFilter;
-  const reviews = await getReviews(sentiment);
+  const { reviews, business } = await getReviews(sentiment);
 
   const filters: { label: string; value: SentimentFilter }[] = [
     { label: 'All', value: 'all' },
@@ -69,7 +85,7 @@ export default async function ReviewsPage({
       <div>
         <h1 className="text-2xl font-bold">Reviews</h1>
         <p className="text-[var(--muted)] mt-1">
-          Showing {reviews.length} most recent reviews{sentiment !== 'all' ? ` · ${sentiment}` : ''}.
+          {business?.name} · {reviews.length} most recent{sentiment !== 'all' ? ` ${sentiment}` : ''} reviews
         </p>
       </div>
 
@@ -100,19 +116,25 @@ export default async function ReviewsPage({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-medium">{review.author_name}</p>
-                <p className="text-xs text-[var(--muted)]">
-                  {review.businessName}
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {review.published_at && (
-                    <>
-                      {' · '}
+                    <span className="text-xs text-[var(--muted)]">
                       {new Date(review.published_at).toLocaleDateString('en-CA', {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
                       })}
-                    </>
+                    </span>
                   )}
-                </p>
+                  {review.barber && (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                      style={{ backgroundColor: review.barber.color ?? '#6366f1' }}
+                    >
+                      {review.barber.name}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Stars rating={review.rating} />
@@ -144,6 +166,12 @@ export default async function ReviewsPage({
             )}
           </div>
         ))}
+
+        {reviews.length === 0 && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-12 text-center">
+            <p className="text-sm text-[var(--muted)]">No {sentiment !== 'all' ? sentiment : ''} reviews found.</p>
+          </div>
+        )}
       </div>
     </div>
   );
