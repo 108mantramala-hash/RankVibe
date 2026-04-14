@@ -1,33 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase-server';
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
+  const supabase = createServerClient();
 
-    const { businessId, rating, message } = body;
+  const body = await req.json();
+  const { businessId, barberId, reviewLinkId, rating, message, contactEmail } = body;
 
-    // Validate required fields
-    if (!businessId || !rating || !message) {
-      return NextResponse.json(
-        { error: 'Missing required fields: businessId, rating, message' },
-        { status: 400 },
-      );
-    }
-
-    // TODO: Insert into Supabase via @rankvibe/db
-    // await db.insert(feedbackSubmissions).values({
-    //   businessId,
-    //   reviewLinkId,
-    //   rating,
-    //   message,
-    //   contactEmail,
-    // });
-
-    console.info(`[feedback] Received rating=${rating} for business=${businessId}`);
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('[feedback] Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  if (!businessId || !rating || !message?.trim()) {
+    return NextResponse.json(
+      { error: 'Missing required fields: businessId, rating, message' },
+      { status: 400 }
+    );
   }
+
+  const { error } = await supabase.from('feedback_submissions').insert({
+    business_id: businessId,
+    barber_id: barberId ?? null,
+    review_link_id: reviewLinkId ?? null,
+    rating,
+    message: message.trim(),
+    contact_email: contactEmail?.trim() || null,
+  });
+
+  if (error) {
+    console.error('[feedback] Supabase error:', error.message);
+    return NextResponse.json({ error: 'Failed to save feedback' }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
 }
