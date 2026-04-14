@@ -30,9 +30,10 @@ async function getInsightsData() {
     snapshotsByBiz[snap.business_id].push(snap);
   }
 
-  // Latest snapshot date for weekly stats
+  // Latest snapshot date for weekly stats — group by date prefix (YYYY-MM-DD) to handle ms differences
   const latestDate = snapshots[0].snapshot_date;
-  const latestSnaps = snapshots.filter((s) => s.snapshot_date === latestDate);
+  const latestDatePrefix = latestDate.slice(0, 10);
+  const latestSnaps = snapshots.filter((s) => s.snapshot_date.slice(0, 10) === latestDatePrefix);
 
   const weeklyStats = {
     date: latestDate,
@@ -86,7 +87,7 @@ function EmptyState() {
         Snapshots are taken every Sunday automatically. You can also trigger one manually to start tracking velocity.
       </p>
       <p className="text-xs text-[var(--muted)] font-mono bg-[var(--background)] border border-[var(--border)] rounded px-3 py-2 inline-block">
-        POST /api/snapshots — x-cron-secret: your_secret
+        GET /api/snapshots — Authorization: Bearer &lt;CRON_SECRET&gt;
       </p>
     </div>
   );
