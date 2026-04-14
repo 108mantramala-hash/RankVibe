@@ -8,6 +8,7 @@ const navItems = [
   { label: 'Reviews', href: '/dashboard/reviews' },
   { label: 'Competitors', href: '/dashboard/competitors' },
   { label: 'Insights', href: '/dashboard/insights' },
+  { label: 'Barbers', href: '/dashboard/barbers' },
   { label: 'QR Codes', href: '/dashboard/qr' },
   { label: 'Feedback', href: '/dashboard/feedback' },
   { label: 'Settings', href: '/dashboard/settings' },
