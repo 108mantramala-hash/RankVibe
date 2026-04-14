@@ -24,7 +24,31 @@ export const businessCategoryEnum = pgEnum('business_category', [
 
 export const sentimentEnum = pgEnum('sentiment', ['positive', 'negative', 'neutral']);
 
-export const replyToneEnum = pgEnum('reply_tone', ['professional', 'friendly', 'empathetic']);
+// Expanded tone set — warm + playful added for barber-owner-facing replies
+export const replyToneEnum = pgEnum('reply_tone', [
+  'professional',
+  'friendly',
+  'empathetic',
+  'warm',
+  'playful',
+]);
+
+export const userRoleEnum = pgEnum('user_role', ['super_admin', 'shop_owner', 'barber']);
+
+export const barberStatusEnum = pgEnum('barber_status', ['active', 'inactive', 'on_leave']);
+
+export const employmentTypeEnum = pgEnum('employment_type', [
+  'employee',
+  'booth_renter',
+  'contractor',
+]);
+
+export const qrPlacementEnum = pgEnum('qr_placement', [
+  'register',
+  'mirror',
+  'waiting_area',
+  'other',
+]);
 
 // ── Phase 1: Intelligence Engine ────────────────────────
 
@@ -65,6 +89,8 @@ export const reviews = pgTable(
     businessId: uuid('business_id')
       .notNull()
       .references(() => businesses.id),
+    // Nullable — set when customer uses a barber-specific QR code
+    barberId: uuid('barber_id').references(() => barbers.id),
     googleReviewId: text('google_review_id').notNull().unique(),
     authorName: text('author_name').notNull(),
     rating: integer('rating').notNull(),
@@ -79,6 +105,7 @@ export const reviews = pgTable(
   (table) => [
     uniqueIndex('reviews_google_review_id_idx').on(table.googleReviewId),
     index('reviews_business_id_idx').on(table.businessId),
+    index('reviews_barber_id_idx').on(table.barberId),
     index('reviews_sentiment_idx').on(table.sentiment),
     index('reviews_rating_idx').on(table.rating),
     index('reviews_published_at_idx').on(table.publishedAt),
@@ -147,9 +174,67 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
   businessId: uuid('business_id').references(() => businesses.id),
-  role: text('role').notNull().default('owner'),
+  // Three tiers: super_admin (you), shop_owner (barbershop), barber (Flutter app)
+  role: userRoleEnum('role').notNull().default('shop_owner'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ── Barbers ──────────────────────────────────────────────
+// Represents individual barbers within a shop.
+// userId links to the users table so each barber can log in to the Flutter app.
+
+export const barbers = pgTable(
+  'barbers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    // Optional — set when barber has been invited / created an account
+    userId: uuid('user_id').references(() => users.id),
+    name: text('name').notNull(),
+    title: text('title').notNull().default('Barber'), // e.g. "Senior Barber", "Master Barber"
+    phone: text('phone'),
+    email: text('email'),
+    employmentType: employmentTypeEnum('employment_type').notNull().default('employee'),
+    status: barberStatusEnum('status').notNull().default('active'),
+    specialties: jsonb('specialties').$type<string[]>(),
+    bio: text('bio'),
+    color: text('color'), // UI color swatch for identification
+    avatarUrl: text('avatar_url'),
+    experienceYears: integer('experience_years'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('barbers_business_id_idx').on(table.businessId),
+    index('barbers_user_id_idx').on(table.userId),
+    index('barbers_status_idx').on(table.status),
+  ]
+);
+
+// ── Barber Schedules ─────────────────────────────────────
+// One row per barber per day of week (0=Sun … 6=Sat).
+
+export const barberSchedules = pgTable(
+  'barber_schedules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    barberId: uuid('barber_id')
+      .notNull()
+      .references(() => barbers.id, { onDelete: 'cascade' }),
+    dayOfWeek: integer('day_of_week').notNull(), // 0 = Sunday, 6 = Saturday
+    startTime: text('start_time'), // "09:00"
+    endTime: text('end_time'),     // "18:00"
+    isOff: boolean('is_off').notNull().default(false),
+  },
+  (table) => [
+    index('schedules_barber_id_idx').on(table.barberId),
+    uniqueIndex('schedules_barber_day_idx').on(table.barberId, table.dayOfWeek),
+  ]
+);
+
+// ── Review Links (QR Codes) ──────────────────────────────
 
 export const reviewLinks = pgTable(
   'review_links',
@@ -158,7 +243,11 @@ export const reviewLinks = pgTable(
     businessId: uuid('business_id')
       .notNull()
       .references(() => businesses.id),
+    // Nullable — barber-specific QR codes link to one barber
+    barberId: uuid('barber_id').references(() => barbers.id),
     slug: text('slug').notNull().unique(),
+    name: text('name'), // Display name: "Front Desk QR", "Marcus – Mirror QR"
+    placement: qrPlacementEnum('placement'), // Where the QR is physically located
     googleReviewUrl: text('google_review_url').notNull(),
     isActive: boolean('is_active').notNull().default(true),
     scanCount: integer('scan_count').notNull().default(0),
@@ -167,6 +256,7 @@ export const reviewLinks = pgTable(
   (table) => [
     uniqueIndex('review_links_slug_idx').on(table.slug),
     index('review_links_business_id_idx').on(table.businessId),
+    index('review_links_barber_id_idx').on(table.barberId),
   ]
 );
 
@@ -177,6 +267,7 @@ export const feedbackSubmissions = pgTable(
     businessId: uuid('business_id')
       .notNull()
       .references(() => businesses.id),
+    barberId: uuid('barber_id').references(() => barbers.id),
     reviewLinkId: uuid('review_link_id').references(() => reviewLinks.id),
     rating: integer('rating').notNull(),
     message: text('message').notNull(),
@@ -185,6 +276,7 @@ export const feedbackSubmissions = pgTable(
   },
   (table) => [
     index('feedback_business_id_idx').on(table.businessId),
+    index('feedback_barber_id_idx').on(table.barberId),
     index('feedback_created_at_idx').on(table.createdAt),
   ]
 );
@@ -199,9 +291,45 @@ export const aiReplies = pgTable(
     suggestedReply: text('suggested_reply').notNull(),
     tone: replyToneEnum('tone').notNull().default('professional'),
     isUsed: boolean('is_used').notNull().default(false),
+    // Owner approval workflow
+    isApproved: boolean('is_approved').notNull().default(false),
+    isPosted: boolean('is_posted').notNull().default(false),
+    approvedAt: timestamp('approved_at'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [
     index('ai_replies_review_id_idx').on(table.reviewId),
   ]
 );
+
+// ── Notification Settings ────────────────────────────────
+// Per-user notification preferences (one row per user).
+
+export const notificationSettings = pgTable('notification_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  newReviewAlert: boolean('new_review_alert').notNull().default(true),
+  negativeReviewAlert: boolean('negative_review_alert').notNull().default(true),
+  weeklyReport: boolean('weekly_report').notNull().default(true),
+  competitorAlert: boolean('competitor_alert').notNull().default(false),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── AI Settings ──────────────────────────────────────────
+// Per-business AI reply configuration (one row per business).
+
+export const aiSettings = pgTable('ai_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id')
+    .notNull()
+    .unique()
+    .references(() => businesses.id, { onDelete: 'cascade' }),
+  defaultTone: replyToneEnum('default_tone').notNull().default('professional'),
+  autoDraft: boolean('auto_draft').notNull().default(true),
+  includeEmoji: boolean('include_emoji').notNull().default(false),
+  shopSignature: text('shop_signature'), // e.g. "— The team at FreshCuts"
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
