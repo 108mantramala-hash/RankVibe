@@ -211,8 +211,8 @@ export default async function InsightsPage() {
                       </div>
                     );
                   })}
-                {Object.keys(snapshotsByBiz ?? {}).filter(
-                  ([, snaps]: [string, typeof snapshots]) => (snaps as typeof snapshots).length >= 2
+                {Object.values(snapshotsByBiz ?? {}).filter(
+                  (snaps) => snaps.length >= 2
                 ).length === 0 && (
                   <p className="text-sm text-[var(--muted)]">
                     Need at least 2 snapshots to show trends. Come back next week!
