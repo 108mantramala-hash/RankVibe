@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Barbers', href: '/dashboard/barbers' },
   { label: 'QR Codes', href: '/dashboard/qr' },
   { label: 'Feedback', href: '/dashboard/feedback' },
+  { label: 'AI Replies', href: '/dashboard/ai-replies' },
   { label: 'Settings', href: '/dashboard/settings' },
 ];
 
