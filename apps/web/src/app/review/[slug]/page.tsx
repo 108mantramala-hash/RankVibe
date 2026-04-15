@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase-server';
-import { RATING_THRESHOLD } from '@rankvibe/core';
 import ReviewFunnel from './ReviewFunnel';
+
+// >= this sends to Google, < this captures feedback privately
+const RATING_THRESHOLD = 4;
 
 export const revalidate = 0; // always fresh — links can be deactivated
 
