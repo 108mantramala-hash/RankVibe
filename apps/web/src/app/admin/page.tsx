@@ -5,81 +5,86 @@ export const revalidate = 0;
 async function getAdminData() {
   const supabase = createServerClient();
 
+  // Use count queries — never fetch all rows for aggregate stats
   const [
+    { count: totalBusinesses },
+    { count: customerCount },
+    { count: totalReviews },
+    { count: enrichedReviews },
+    { count: totalFeedback },
     { data: businesses },
-    { data: reviews },
     { data: users },
     { data: snapshots },
-    { data: feedback },
     { data: qrLinks },
   ] = await Promise.all([
-    supabase.from('businesses').select('id, name, is_customer, is_tracked, google_rating, google_review_count, city, created_at'),
-    supabase.from('reviews').select('id, sentiment, business_id, created_at'),
-    supabase.from('users').select('id, email, role, business_id, created_at'),
-    supabase.from('review_snapshots').select('business_id, avg_rating, review_count, snapshot_date').order('snapshot_date', { ascending: false }).limit(200),
-    supabase.from('feedback_submissions').select('id, rating, created_at'),
+    supabase.from('businesses').select('*', { count: 'exact', head: true }),
+    supabase.from('businesses').select('*', { count: 'exact', head: true }).eq('is_customer', true),
+    supabase.from('reviews').select('*', { count: 'exact', head: true }),
+    supabase.from('reviews').select('*', { count: 'exact', head: true }).not('sentiment', 'is', null),
+    supabase.from('feedback_submissions').select('*', { count: 'exact', head: true }),
+    supabase.from('businesses').select('id, name, city, google_rating, google_review_count, is_customer, created_at'),
+    supabase.from('users').select('id, email, role, business_id, created_at').order('created_at'),
+    supabase.from('review_snapshots')
+      .select('business_id, avg_rating, review_count, positive_count, negative_count, snapshot_date')
+      .order('snapshot_date', { ascending: false })
+      .limit(500),
     supabase.from('review_links').select('id, business_id, scan_count, is_active'),
   ]);
 
-  const totalBusinesses = businesses?.length ?? 0;
-  const customerBusinesses = businesses?.filter((b) => b.is_customer) ?? [];
-  const totalReviews = reviews?.length ?? 0;
-  const enriched = reviews?.filter((r) => r.sentiment !== null).length ?? 0;
-  const totalFeedback = feedback?.length ?? 0;
   const totalScans = qrLinks?.reduce((s, l) => s + (l.scan_count ?? 0), 0) ?? 0;
 
-  // Per-customer-business summary
-  const bizMap: Record<string, NonNullable<typeof businesses>[0]> = {};
-  for (const b of businesses ?? []) bizMap[b.id] = b;
+  // Per-business review counts via separate queries for customer businesses
+  const customerBizIds = (businesses ?? []).filter((b) => b.is_customer).map((b) => b.id);
 
-  const reviewCountByBiz: Record<string, number> = {};
-  for (const r of reviews ?? []) {
-    reviewCountByBiz[r.business_id] = (reviewCountByBiz[r.business_id] ?? 0) + 1;
-  }
+  // Fetch actual review counts per customer business
+  const reviewCountsByBiz: Record<string, number> = {};
+  await Promise.all(
+    customerBizIds.map(async (bizId) => {
+      const { count } = await supabase
+        .from('reviews')
+        .select('*', { count: 'exact', head: true })
+        .eq('business_id', bizId);
+      reviewCountsByBiz[bizId] = count ?? 0;
+    })
+  );
 
   // Latest snapshot per business
-  const latestSnapByBiz: Record<string, { avgRating: number; reviewCount: number; date: string }> = {};
+  const latestSnapByBiz: Record<string, { avgRating: number; reviewCount: number; positiveCount: number; negativeCount: number }> = {};
   for (const s of snapshots ?? []) {
     if (!latestSnapByBiz[s.business_id]) {
       latestSnapByBiz[s.business_id] = {
         avgRating: s.avg_rating,
         reviewCount: s.review_count,
-        date: s.snapshot_date,
+        positiveCount: s.positive_count ?? 0,
+        negativeCount: s.negative_count ?? 0,
       };
     }
   }
 
-  const customerSummaries = customerBusinesses.map((b) => ({
-    id: b.id,
-    name: b.name,
-    city: b.city,
-    googleRating: b.google_rating,
-    reviewCount: reviewCountByBiz[b.id] ?? 0,
-    latestSnap: latestSnapByBiz[b.id] ?? null,
-    qrCodes: qrLinks?.filter((l) => l.business_id === b.id).length ?? 0,
-    totalScans: qrLinks?.filter((l) => l.business_id === b.id).reduce((s, l) => s + l.scan_count, 0) ?? 0,
-    joinedAt: b.created_at,
-  }));
-
-  // All 79 tracked businesses brief list
-  const allTracked = (businesses ?? [])
-    .filter((b) => !b.is_customer)
+  const customerSummaries = (businesses ?? [])
+    .filter((b) => b.is_customer)
     .map((b) => ({
       id: b.id,
       name: b.name,
       city: b.city,
       googleRating: b.google_rating,
-      googleReviewCount: b.google_review_count,
-      reviewCount: reviewCountByBiz[b.id] ?? 0,
-    }))
-    .sort((a, b) => b.reviewCount - a.reviewCount);
+      reviewCount: reviewCountsByBiz[b.id] ?? 0,
+      latestSnap: latestSnapByBiz[b.id] ?? null,
+      qrCodes: qrLinks?.filter((l) => l.business_id === b.id).length ?? 0,
+      totalScans: qrLinks?.filter((l) => l.business_id === b.id).reduce((s, l) => s + l.scan_count, 0) ?? 0,
+      joinedAt: b.created_at,
+    }));
+
+  const allTracked = (businesses ?? [])
+    .filter((b) => !b.is_customer)
+    .sort((a, b) => (b.google_review_count ?? 0) - (a.google_review_count ?? 0));
 
   return {
-    totalBusinesses,
-    customerCount: customerBusinesses.length,
-    totalReviews,
-    enriched,
-    totalFeedback,
+    totalBusinesses: totalBusinesses ?? 0,
+    customerCount: customerCount ?? 0,
+    totalReviews: totalReviews ?? 0,
+    enrichedReviews: enrichedReviews ?? 0,
+    totalFeedback: totalFeedback ?? 0,
     totalScans,
     users: users ?? [],
     customerSummaries,
@@ -101,7 +106,7 @@ export default async function AdminPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Total Businesses', value: data.totalBusinesses, sub: `${data.customerCount} subscribed` },
-          { label: 'Total Reviews', value: data.totalReviews.toLocaleString(), sub: `${data.enriched.toLocaleString()} enriched` },
+          { label: 'Total Reviews', value: data.totalReviews.toLocaleString(), sub: `${data.enrichedReviews.toLocaleString()} enriched` },
           { label: 'QR Scans', value: data.totalScans.toLocaleString(), sub: 'across all shops' },
           { label: 'Feedback Captured', value: data.totalFeedback, sub: 'private submissions' },
         ].map((card) => (
@@ -139,7 +144,12 @@ export default async function AdminPage() {
                     { label: 'Reviews', value: biz.reviewCount.toLocaleString() },
                     { label: 'QR Codes', value: biz.qrCodes },
                     { label: 'Scans', value: biz.totalScans },
-                    { label: 'Snap Rating', value: biz.latestSnap ? `${biz.latestSnap.avgRating}⭐` : '—' },
+                    {
+                      label: 'Sentiment',
+                      value: biz.latestSnap
+                        ? `${biz.latestSnap.positiveCount}✓ ${biz.latestSnap.negativeCount}✗`
+                        : '—',
+                    },
                   ].map((stat) => (
                     <div key={stat.label} className="rounded-md bg-[var(--card)] border border-[var(--border)] p-2">
                       <p className="text-sm font-bold">{stat.value}</p>
@@ -177,10 +187,15 @@ export default async function AdminPage() {
         </div>
       </div>
 
-      {/* All tracked businesses */}
+      {/* All tracked businesses preview */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-        <h2 className="text-base font-semibold mb-1">All Tracked Businesses</h2>
-        <p className="text-xs text-[var(--muted)] mb-4">{data.allTracked.length} North York businesses in the intelligence layer</p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-semibold">All Tracked Businesses</h2>
+            <p className="text-xs text-[var(--muted)] mt-0.5">{data.allTracked.length} North York businesses — intelligence layer</p>
+          </div>
+          <a href="/admin/businesses" className="text-xs text-brand-600 hover:underline">View all →</a>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -188,23 +203,18 @@ export default async function AdminPage() {
                 <th className="text-left pb-2 font-medium">Name</th>
                 <th className="text-right pb-2 font-medium">Google ⭐</th>
                 <th className="text-right pb-2 font-medium">Google Reviews</th>
-                <th className="text-right pb-2 font-medium">Scraped Reviews</th>
               </tr>
             </thead>
             <tbody>
-              {data.allTracked.slice(0, 20).map((b) => (
+              {data.allTracked.slice(0, 10).map((b) => (
                 <tr key={b.id} className="border-b border-[var(--border)] last:border-0">
                   <td className="py-2 font-medium truncate max-w-[200px]">{b.name}</td>
-                  <td className="py-2 text-right">{b.googleRating ?? '—'}</td>
-                  <td className="py-2 text-right text-[var(--muted)]">{b.googleReviewCount?.toLocaleString() ?? '—'}</td>
-                  <td className="py-2 text-right text-[var(--muted)]">{b.reviewCount.toLocaleString()}</td>
+                  <td className="py-2 text-right">{b.google_rating ?? '—'}</td>
+                  <td className="py-2 text-right text-[var(--muted)]">{b.google_review_count?.toLocaleString() ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {data.allTracked.length > 20 && (
-            <p className="text-xs text-[var(--muted)] mt-3">Showing 20 of {data.allTracked.length}</p>
-          )}
         </div>
       </div>
     </div>
