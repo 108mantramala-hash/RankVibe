@@ -22,6 +22,85 @@ const TONE_OPTIONS: { value: Tone; label: string; desc: string }[] = [
 
 const BUSINESS_ID = '80f21118-b561-45a0-9388-3e91bfa3f459';
 
+function GoogleConnectSection({ businessId }: { businessId: string }) {
+  const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading');
+  const [locationName, setLocationName] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/google-connection?businessId=${businessId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.connected) {
+          setStatus('connected');
+          setLocationName(data.locationName ?? null);
+        } else {
+          setStatus('disconnected');
+        }
+      })
+      .catch(() => setStatus('disconnected'));
+  }, [businessId]);
+
+  // Check for redirect result from OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('google_connected') === '1') {
+      setStatus('connected');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  function handleConnect() {
+    window.location.href = `/api/auth/google?businessId=${businessId}`;
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 animate-pulse">
+        <div className="h-4 bg-[var(--border)] rounded w-48" />
+      </div>
+    );
+  }
+
+  if (status === 'connected') {
+    return (
+      <div className="rounded-xl border border-green-200 bg-green-50 p-5 flex items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+            <p className="text-sm font-semibold text-green-800">Google Business Profile connected</p>
+          </div>
+          {locationName && (
+            <p className="text-xs text-green-700 mt-1 ml-4">{locationName}</p>
+          )}
+        </div>
+        <button
+          onClick={handleConnect}
+          className="text-xs px-3 py-1.5 rounded-lg border border-green-300 text-green-700 hover:bg-green-100 transition-colors"
+        >
+          Reconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium">Not connected</p>
+        <p className="text-xs text-[var(--muted)] mt-0.5">
+          Connect to enable one-click reply posting to Google
+        </p>
+      </div>
+      <button
+        onClick={handleConnect}
+        className="text-sm px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition-colors shrink-0"
+      >
+        Connect Google
+      </button>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AiSettings>({
     business_id: BUSINESS_ID,
@@ -172,6 +251,15 @@ export default function SettingsPage() {
             />
           </div>
         </div>
+      </section>
+
+      {/* Google Business Profile */}
+      <section>
+        <h2 className="text-base font-semibold mb-1">Google Business Profile</h2>
+        <p className="text-xs text-[var(--muted)] mb-4">
+          Connect your Google account to post review replies directly from RankVibe.
+        </p>
+        <GoogleConnectSection businessId={BUSINESS_ID} />
       </section>
 
       {/* Notification Settings */}

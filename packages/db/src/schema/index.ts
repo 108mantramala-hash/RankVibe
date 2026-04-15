@@ -333,3 +333,23 @@ export const aiSettings = pgTable('ai_settings', {
   shopSignature: text('shop_signature'), // e.g. "— The team at FreshCuts"
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ── Google Business Profile Connection ───────────────────
+// Stores OAuth tokens per business so we can post replies
+// and sync reviews directly via the Google Business Profile API.
+
+export const googleConnections = pgTable('google_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id')
+    .notNull()
+    .unique()
+    .references(() => businesses.id, { onDelete: 'cascade' }),
+  googleAccountId: text('google_account_id'),    // Google account ID (accounts/{id})
+  googleLocationId: text('google_location_id'),  // Location resource name (accounts/{id}/locations/{id})
+  googleLocationName: text('google_location_name'), // Human-readable location name
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  tokenExpiry: timestamp('token_expiry'),
+  connectedAt: timestamp('connected_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
