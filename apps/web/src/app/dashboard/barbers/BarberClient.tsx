@@ -139,8 +139,22 @@ function BarberQrModal({
 
           {qr ? (
             <div className="flex flex-col items-center gap-4">
-              <div className="p-3 bg-white rounded-xl border border-[var(--border)]">
-                <QRCodeSVG value={qrUrl} size={180} marginSize={1} />
+              {/* QR with barber badge overlaid in center */}
+              <div className="p-3 bg-white rounded-xl border border-[var(--border)] relative inline-block">
+                <QRCodeSVG value={qrUrl} size={180} marginSize={1} level="H" />
+                {/* Barber name badge — sits over the QR center, covered by error correction */}
+                <div
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                >
+                  <div
+                    className="rounded-lg px-2 py-1 flex flex-col items-center shadow-sm border-2 border-white"
+                    style={{ backgroundColor: barber.color ?? '#6366f1', maxWidth: 64 }}
+                  >
+                    <span className="text-white font-bold text-xs leading-tight text-center" style={{ fontSize: 10 }}>
+                      {barber.name.split(' ')[0]}
+                    </span>
+                  </div>
+                </div>
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium">{qr.name ?? barber.name}</p>
