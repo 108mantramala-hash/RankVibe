@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
   const {
     business_id,
     name,
+    known_as,
     title = 'Barber',
     phone,
     email,
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
       email: email || null,
       employment_type,
       status,
+      known_as: known_as || null,
       specialties: specialties.length > 0 ? specialties : null,
       bio: bio || null,
       color: color || null,

@@ -16,7 +16,7 @@ export async function PATCH(
 
   // Only allow updating these fields
   const allowed = [
-    'name', 'title', 'phone', 'email', 'employment_type', 'status',
+    'name', 'known_as', 'title', 'phone', 'email', 'employment_type', 'status',
     'specialties', 'bio', 'color', 'avatar_url', 'experience_years',
   ];
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };

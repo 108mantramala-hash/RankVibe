@@ -202,6 +202,7 @@ export const barbers = pgTable(
     bio: text('bio'),
     color: text('color'), // UI color swatch for identification
     avatarUrl: text('avatar_url'),
+    knownAs: text('known_as'), // Short name / nickname used on QR codes (e.g. "Marc", "MJ")
     experienceYears: integer('experience_years'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),

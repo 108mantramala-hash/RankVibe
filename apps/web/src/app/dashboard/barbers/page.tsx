@@ -20,7 +20,7 @@ async function getBarbersData() {
   const [{ data: barbers }, { data: reviews }, { data: reviewLinks }] = await Promise.all([
     supabase
       .from('barbers')
-      .select('id, name, title, phone, email, employment_type, status, specialties, bio, color, experience_years, business_id')
+      .select('id, name, known_as, title, phone, email, employment_type, status, specialties, bio, color, experience_years, business_id')
       .eq('business_id', business.id)
       .order('created_at', { ascending: true }),
     supabase

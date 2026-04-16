@@ -13,6 +13,7 @@ interface Barber {
   id: string;
   business_id: string;
   name: string;
+  known_as: string | null; // Short name / nickname for QR badge
   title: string;
   phone: string | null;
   email: string | null;
@@ -26,6 +27,7 @@ interface Barber {
 
 interface BarberFormData {
   name: string;
+  known_as: string;
   title: string;
   phone: string;
   email: string;
@@ -73,6 +75,7 @@ const EMPLOYMENT_LABELS: Record<EmploymentType, string> = {
 
 const EMPTY_FORM: BarberFormData = {
   name: '',
+  known_as: '',
   title: 'Barber',
   phone: '',
   email: '',
@@ -150,8 +153,8 @@ function BarberQrModal({
                     className="rounded-lg px-2 py-1 flex flex-col items-center shadow-sm border-2 border-white"
                     style={{ backgroundColor: barber.color ?? '#6366f1', maxWidth: 64 }}
                   >
-                    <span className="text-white font-bold text-xs leading-tight text-center" style={{ fontSize: 10 }}>
-                      {barber.name.split(' ')[0]}
+                    <span className="text-white font-bold leading-tight text-center" style={{ fontSize: 10 }}>
+                      {barber.known_as || barber.name.split(' ')[0]}
                     </span>
                   </div>
                 </div>
@@ -334,6 +337,7 @@ function BarberModal({
     editingBarber
       ? {
           name: editingBarber.name,
+          known_as: editingBarber.known_as ?? '',
           title: editingBarber.title,
           phone: editingBarber.phone ?? '',
           email: editingBarber.email ?? '',
@@ -362,6 +366,7 @@ function BarberModal({
     const payload = {
       business_id: businessId,
       name: form.name.trim(),
+      known_as: form.known_as.trim() || null,
       title: form.title.trim() || 'Barber',
       phone: form.phone.trim(),
       email: form.email.trim(),
@@ -428,10 +433,10 @@ function BarberModal({
               </div>
             </div>
 
-            {/* Name + Title */}
+            {/* Name + Known As */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-[var(--muted)] mb-1 block">Name *</label>
+                <label className="text-xs text-[var(--muted)] mb-1 block">Full Name *</label>
                 <input
                   required
                   value={form.name}
@@ -440,6 +445,21 @@ function BarberModal({
                   className="w-full text-sm rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 outline-none focus:border-brand-500"
                 />
               </div>
+              <div>
+                <label className="text-xs text-[var(--muted)] mb-1 block">
+                  Known As <span className="font-normal text-[var(--muted)]">(QR badge)</span>
+                </label>
+                <input
+                  value={form.known_as}
+                  onChange={(e) => set('known_as', e.target.value)}
+                  placeholder="Marc, MJ…"
+                  className="w-full text-sm rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            {/* Title */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-[var(--muted)] mb-1 block">Title</label>
                 <input
