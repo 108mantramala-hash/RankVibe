@@ -39,11 +39,20 @@ async function getReviews(sentiment: SentimentFilter) {
   const barberMap: Record<string, { name: string; color: string | null }> = {};
   for (const b of barberResult.data ?? []) barberMap[b.id] = { name: b.name, color: b.color };
 
+  function parseJsonArray(val: unknown): string[] {
+    if (!val) return [];
+    if (Array.isArray(val)) return val as string[];
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch { return []; }
+    }
+    return [];
+  }
+
   return {
     business,
     reviews: (reviewResult.data ?? []).map((r) => ({
       ...r,
-      themes: (r.themes as string[]) ?? [],
+      themes: parseJsonArray(r.themes),
       barber: r.barber_id ? barberMap[r.barber_id] : null,
     })),
   };

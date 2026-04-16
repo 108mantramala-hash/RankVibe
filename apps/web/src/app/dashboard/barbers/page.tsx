@@ -51,7 +51,21 @@ async function getBarbersData() {
     }
   }
 
-  return { business, barbers: barbers ?? [], barberStats };
+  function parseJsonArray(val: unknown): string[] | null {
+    if (!val) return null;
+    if (Array.isArray(val)) return val as string[];
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch { return null; }
+    }
+    return null;
+  }
+
+  const parsedBarbers = (barbers ?? []).map((b) => ({
+    ...b,
+    specialties: parseJsonArray(b.specialties),
+  }));
+
+  return { business, barbers: parsedBarbers, barberStats };
 }
 
 export default async function BarbersPage() {
