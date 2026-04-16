@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase-server';
 
-export const revalidate = 1800;
+export const dynamic = 'force-dynamic';
 
 type SentimentFilter = 'all' | 'positive' | 'negative' | 'neutral';
 

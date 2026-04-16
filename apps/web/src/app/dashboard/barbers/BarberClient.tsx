@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 // ── Types ────────────────────────────────────────────────
@@ -443,12 +443,11 @@ export default function BarberClient({
   barberStats: Record<string, { reviewCount: number; avgRating: number | null }>;
 }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
   const [showModal, setShowModal] = useState(false);
   const [editingBarber, setEditingBarber] = useState<Barber | null>(null);
 
   function refresh() {
-    startTransition(() => router.refresh());
+    router.refresh();
   }
 
   function openAdd() {
