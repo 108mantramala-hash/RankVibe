@@ -15,9 +15,9 @@ async function getBarbersData() {
     .limit(1);
 
   const business = businesses?.[0] ?? null;
-  if (!business) return { business: null, barbers: [], barberStats: {} };
+  if (!business) return { business: null, barbers: [], barberStats: {}, qrByBarber: {}, shopGoogleUrl: '' };
 
-  const [{ data: barbers }, { data: reviews }] = await Promise.all([
+  const [{ data: barbers }, { data: reviews }, { data: reviewLinks }] = await Promise.all([
     supabase
       .from('barbers')
       .select('id, name, title, phone, email, employment_type, status, specialties, bio, color, experience_years, business_id')
@@ -26,6 +26,11 @@ async function getBarbersData() {
     supabase
       .from('reviews')
       .select('barber_id, rating')
+      .eq('business_id', business.id)
+      .not('barber_id', 'is', null),
+    supabase
+      .from('review_links')
+      .select('id, barber_id, slug, name, google_review_url, is_active, scan_count')
       .eq('business_id', business.id)
       .not('barber_id', 'is', null),
   ]);
@@ -65,11 +70,29 @@ async function getBarbersData() {
     specialties: parseJsonArray(b.specialties),
   }));
 
-  return { business, barbers: parsedBarbers, barberStats };
+  // QR link keyed by barber id (first active one wins)
+  const qrByBarber: Record<string, { id: string; slug: string; name: string | null; scanCount: number; googleReviewUrl: string }> = {};
+  for (const link of reviewLinks ?? []) {
+    if (link.barber_id && !qrByBarber[link.barber_id]) {
+      qrByBarber[link.barber_id] = {
+        id: link.id,
+        slug: link.slug,
+        name: link.name,
+        scanCount: link.scan_count,
+        googleReviewUrl: link.google_review_url,
+      };
+    }
+  }
+
+  // Get the shop's google review URL from any existing link
+  const shopGoogleUrl = (reviewLinks ?? [])[0]?.google_review_url
+    ?? 'https://search.google.com/local/writereview?placeid=ChIJB3qd7TEtK4gR-t0k06aGpss';
+
+  return { business, barbers: parsedBarbers, barberStats, qrByBarber, shopGoogleUrl };
 }
 
 export default async function BarbersPage() {
-  const { business, barbers, barberStats } = await getBarbersData();
+  const { business, barbers, barberStats, qrByBarber, shopGoogleUrl } = await getBarbersData();
 
   if (!business) {
     return (
@@ -99,6 +122,8 @@ export default async function BarbersPage() {
         initialBarbers={barbers}
         businessId={business.id}
         barberStats={barberStats}
+        qrByBarber={qrByBarber}
+        shopGoogleUrl={shopGoogleUrl}
       />
     </div>
   );

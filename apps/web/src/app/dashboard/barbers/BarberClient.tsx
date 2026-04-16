@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { QRCodeSVG } from 'qrcode.react';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -34,6 +35,14 @@ interface BarberFormData {
   bio: string;
   color: string;
   experience_years: string;
+}
+
+interface QrLink {
+  id: string;
+  slug: string;
+  name: string | null;
+  scanCount: number;
+  googleReviewUrl: string;
 }
 
 // ── Constants ────────────────────────────────────────────
@@ -75,22 +84,125 @@ const EMPTY_FORM: BarberFormData = {
   experience_years: '',
 };
 
+// ── QR Modal ────────────────────────────────────────────
+
+function BarberQrModal({
+  barber,
+  existingQr,
+  businessId,
+  shopGoogleUrl,
+  onClose,
+  onCreated,
+}: {
+  barber: Barber;
+  existingQr: QrLink | null;
+  businessId: string;
+  shopGoogleUrl: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [qr, setQr] = useState<QrLink | null>(existingQr);
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+  async function handleGenerate() {
+    setCreating(true);
+    const res = await fetch('/api/qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        business_id: businessId,
+        barber_id: barber.id,
+        name: `${barber.name} – QR`,
+        placement: 'mirror',
+        google_review_url: shopGoogleUrl,
+      }),
+    });
+    const data = await res.json();
+    if (data.link) {
+      setQr({ id: data.link.id, slug: data.link.slug, name: data.link.name, scanCount: 0, googleReviewUrl: data.link.google_review_url });
+      onCreated();
+    }
+    setCreating(false);
+  }
+
+  const qrUrl = qr ? `${baseUrl}/review/${qr.slug}` : '';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] w-full max-w-sm shadow-xl">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold">{barber.name} — QR Code</h2>
+            <button onClick={onClose} className="text-[var(--muted)] hover:text-[var(--foreground)] text-lg">✕</button>
+          </div>
+
+          {qr ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="p-3 bg-white rounded-xl border border-[var(--border)]">
+                <QRCodeSVG value={qrUrl} size={180} marginSize={1} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium">{qr.name ?? barber.name}</p>
+                <p className="text-xs text-[var(--muted)] mt-0.5 font-mono">/review/{qr.slug}</p>
+                <p className="text-xs text-[var(--muted)] mt-1">{qr.scanCount} scans</p>
+              </div>
+              <a
+                href={qrUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-brand-600 hover:underline"
+              >
+                Preview review page →
+              </a>
+              <button
+                onClick={onClose}
+                className="w-full text-sm py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <div className="text-center space-y-4">
+              <div className="p-8 rounded-xl border border-dashed border-[var(--border)] text-[var(--muted)]">
+                <p className="text-3xl mb-2">📱</p>
+                <p className="text-sm">No QR code yet for {barber.name}</p>
+              </div>
+              <button
+                onClick={handleGenerate}
+                disabled={creating}
+                className="w-full text-sm py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-60"
+              >
+                {creating ? 'Generating…' : 'Generate QR Code'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Barber Card ──────────────────────────────────────────
 
 function BarberCard({
   barber,
   reviewCount,
   avgRating,
+  qr,
   onEdit,
   onStatusChange,
   onDelete,
+  onQr,
 }: {
   barber: Barber;
   reviewCount: number;
   avgRating: number | null;
+  qr: QrLink | null;
   onEdit: (b: Barber) => void;
   onStatusChange: (id: string, status: BarberStatus) => void;
   onDelete: (id: string, name: string) => void;
+  onQr: (b: Barber) => void;
 }) {
   const initials = barber.name
     .split(' ')
@@ -158,6 +270,13 @@ function BarberCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
+        <button
+          onClick={() => onQr(barber)}
+          className={`text-xs py-1.5 px-2 rounded-md border transition-colors ${qr ? 'border-brand-300 text-brand-600 bg-brand-50 hover:bg-brand-100' : 'border-[var(--border)] hover:bg-[var(--background)]'}`}
+          title={qr ? `QR · ${qr.scanCount} scans` : 'Generate QR'}
+        >
+          QR{qr ? ' ✓' : ''}
+        </button>
         <button
           onClick={() => onEdit(barber)}
           className="flex-1 text-xs py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--background)] transition-colors"
@@ -437,14 +556,19 @@ export default function BarberClient({
   initialBarbers,
   businessId,
   barberStats,
+  qrByBarber,
+  shopGoogleUrl,
 }: {
   initialBarbers: Barber[];
   businessId: string;
   barberStats: Record<string, { reviewCount: number; avgRating: number | null }>;
+  qrByBarber: Record<string, QrLink>;
+  shopGoogleUrl: string;
 }) {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [editingBarber, setEditingBarber] = useState<Barber | null>(null);
+  const [qrBarber, setQrBarber] = useState<Barber | null>(null);
 
   function refresh() {
     router.refresh();
@@ -525,9 +649,11 @@ export default function BarberClient({
                 barber={barber}
                 reviewCount={barberStats[barber.id]?.reviewCount ?? 0}
                 avgRating={barberStats[barber.id]?.avgRating ?? null}
+                qr={qrByBarber[barber.id] ?? null}
                 onEdit={openEdit}
                 onStatusChange={handleStatusChange}
                 onDelete={handleDelete}
+                onQr={setQrBarber}
               />
             ))}
           </div>
@@ -545,16 +671,18 @@ export default function BarberClient({
                 barber={barber}
                 reviewCount={barberStats[barber.id]?.reviewCount ?? 0}
                 avgRating={barberStats[barber.id]?.avgRating ?? null}
+                qr={qrByBarber[barber.id] ?? null}
                 onEdit={openEdit}
                 onStatusChange={handleStatusChange}
                 onDelete={handleDelete}
+                onQr={setQrBarber}
               />
             ))}
           </div>
         </div>
       )}
 
-      {/* Modal */}
+      {/* Barber edit/add modal */}
       {showModal && (
         <BarberModal
           businessId={businessId}
@@ -564,6 +692,18 @@ export default function BarberClient({
             setShowModal(false);
             refresh();
           }}
+        />
+      )}
+
+      {/* QR modal */}
+      {qrBarber && (
+        <BarberQrModal
+          barber={qrBarber}
+          existingQr={qrByBarber[qrBarber.id] ?? null}
+          businessId={businessId}
+          shopGoogleUrl={shopGoogleUrl}
+          onClose={() => setQrBarber(null)}
+          onCreated={refresh}
         />
       )}
     </>
