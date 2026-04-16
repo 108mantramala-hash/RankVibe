@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase-server';
 
-export const revalidate = 1800;
+export const dynamic = 'force-dynamic';
 
 async function getDashboardData() {
   const supabase = createServerClient();
@@ -169,9 +169,10 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-bold">Overview</h1>
         <p className="text-[var(--muted)] mt-1">{business.name}</p>
         {oldestDate && newestDate && (
-          <p className="text-xs text-[var(--muted)] mt-1">
-            Review data captured: {fmt(oldestDate)} — {fmt(newestDate)}
-          </p>
+          <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 inline-block" />
+            Review data captured: <span className="font-semibold">{fmt(oldestDate)}</span> — <span className="font-semibold">{fmt(newestDate)}</span>
+          </div>
         )}
       </div>
 
