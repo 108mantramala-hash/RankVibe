@@ -15,7 +15,7 @@ async function getDashboardData() {
   const business = businesses?.[0] ?? null;
   if (!business) return null;
 
-  const [{ data: reviews }, { data: snapshots }, { data: allBusinesses }] = await Promise.all([
+  const [{ data: reviews }, { data: snapshots }, { data: allBusinesses }, { data: oldestReview }, { data: newestReview }] = await Promise.all([
     supabase
       .from('reviews')
       .select('id, rating, sentiment, themes')
@@ -30,6 +30,20 @@ async function getDashboardData() {
     supabase
       .from('businesses')
       .select('id, google_rating, google_review_count'),
+    supabase
+      .from('reviews')
+      .select('published_at')
+      .eq('business_id', business.id)
+      .not('published_at', 'is', null)
+      .order('published_at', { ascending: true })
+      .limit(1),
+    supabase
+      .from('reviews')
+      .select('published_at')
+      .eq('business_id', business.id)
+      .not('published_at', 'is', null)
+      .order('published_at', { ascending: false })
+      .limit(1),
   ]);
 
   const totalReviews = reviews?.length ?? 0;
@@ -70,6 +84,9 @@ async function getDashboardData() {
       ? parseFloat((latestSnap.avg_rating - prevSnap.avg_rating).toFixed(2))
       : 0;
 
+  const oldestDate = oldestReview?.[0]?.published_at ?? null;
+  const newestDate = newestReview?.[0]?.published_at ?? null;
+
   return {
     business,
     totalReviews,
@@ -83,6 +100,8 @@ async function getDashboardData() {
     totalCompetitors: sorted.length,
     latestSnap,
     ratingTrend,
+    oldestDate,
+    newestDate,
   };
 }
 
@@ -133,17 +152,27 @@ export default async function DashboardPage() {
     totalCompetitors,
     latestSnap,
     ratingTrend,
+    oldestDate,
+    newestDate,
   } = data;
 
   const positiveRate = enriched > 0 ? Math.round((positive / enriched) * 100) : 0;
   const negativeRate = enriched > 0 ? Math.round((negative / enriched) * 100) : 0;
   const neutralRate = enriched > 0 ? Math.round((neutral / enriched) * 100) : 0;
 
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Overview</h1>
         <p className="text-[var(--muted)] mt-1">{business.name}</p>
+        {oldestDate && newestDate && (
+          <p className="text-xs text-[var(--muted)] mt-1">
+            Review data captured: {fmt(oldestDate)} — {fmt(newestDate)}
+          </p>
+        )}
       </div>
 
       {/* Stat cards */}
