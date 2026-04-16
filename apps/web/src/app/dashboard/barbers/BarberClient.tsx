@@ -22,6 +22,7 @@ interface Barber {
   specialties: string[] | null;
   bio: string | null;
   color: string | null;
+  avatar_url: string | null;
   experience_years: number | null;
 }
 
@@ -233,10 +234,17 @@ function BarberCard({
       {/* Header */}
       <div className="flex items-start gap-3">
         <div
-          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+          className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden"
           style={{ backgroundColor: barber.color ?? '#6366f1' }}
         >
-          {initials}
+          {barber.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={barber.avatar_url} alt={barber.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">
+              {initials}
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -352,6 +360,15 @@ function BarberModal({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(editingBarber?.avatar_url ?? null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  }
 
   function set(field: keyof BarberFormData, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -390,11 +407,23 @@ function BarberModal({
       body: JSON.stringify(payload),
     });
 
+    const resData = await res.json();
+
     if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? 'Failed to save barber');
+      setError(resData.error ?? 'Failed to save barber');
       setSaving(false);
       return;
+    }
+
+    // Upload avatar if a new file was selected
+    if (avatarFile) {
+      const barberId = resData.barber?.id ?? editingBarber?.id;
+      if (barberId) {
+        const fd = new FormData();
+        fd.append('file', avatarFile);
+        fd.append('barberId', barberId);
+        await fetch('/api/barbers/avatar', { method: 'POST', body: fd });
+      }
     }
 
     onSaved();
@@ -414,6 +443,39 @@ function BarberModal({
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Avatar photo picker */}
+            <div className="flex items-center gap-4">
+              <label className="cursor-pointer group" title="Click to upload photo">
+                <div
+                  className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-lg border-2 border-dashed border-[var(--border)] group-hover:border-brand-400 transition-colors relative"
+                  style={{ backgroundColor: form.color }}
+                >
+                  {avatarPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-sm opacity-80">
+                      {form.name ? form.name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) : '📷'}
+                    </span>
+                  )}
+                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-full">
+                    <span className="text-white text-xs">Edit</span>
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+              </label>
+              <div className="text-xs text-[var(--muted)]">
+                <p className="font-medium">Profile Photo</p>
+                <p>JPEG, PNG or WebP · max 5MB</p>
+                <p className="mt-1">Click avatar to upload</p>
+              </div>
+            </div>
+
             {/* Color picker */}
             <div>
               <label className="text-xs text-[var(--muted)] mb-2 block">Profile Color</label>
