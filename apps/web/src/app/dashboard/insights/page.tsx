@@ -1,17 +1,20 @@
 import { createServerClient } from '@/lib/supabase-server';
+import { getSessionBusinessId } from '@/lib/get-session-business';
 
-export const revalidate = 0;
+export const dynamic = 'force-dynamic';
 
 async function getInsightsData() {
   const supabase = createServerClient();
 
-  const { data: businesses } = await supabase
+  const businessId = await getSessionBusinessId();
+  if (!businessId) return { hasData: false, business: null, snapshots: [], topThemes: [] };
+
+  const { data: business } = await supabase
     .from('businesses')
     .select('id, name')
-    .eq('is_customer', true)
-    .limit(1);
+    .eq('id', businessId)
+    .maybeSingle();
 
-  const business = businesses?.[0] ?? null;
   if (!business) return { hasData: false, business: null, snapshots: [], topThemes: [] };
 
   const { data: snapshots } = await supabase

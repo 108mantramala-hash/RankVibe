@@ -1,20 +1,21 @@
 import { createServerClient } from '@/lib/supabase-server';
 import BarberClient from './BarberClient';
+import { getSessionBusinessId } from '@/lib/get-session-business';
 
-export const revalidate = 0;
+export const dynamic = 'force-dynamic';
 
 async function getBarbersData() {
   const supabase = createServerClient();
 
-  // Until auth is wired: use the first isCustomer business as the "current shop"
-  // Once auth is added, this becomes: businesses.eq('id', session.user.businessId)
-  const { data: businesses } = await supabase
+  const businessId = await getSessionBusinessId();
+  if (!businessId) return { business: null, barbers: [], barberStats: {}, qrByBarber: {}, shopGoogleUrl: '' };
+
+  const { data: business } = await supabase
     .from('businesses')
     .select('id, name')
-    .eq('is_customer', true)
-    .limit(1);
+    .eq('id', businessId)
+    .maybeSingle();
 
-  const business = businesses?.[0] ?? null;
   if (!business) return { business: null, barbers: [], barberStats: {}, qrByBarber: {}, shopGoogleUrl: '' };
 
   const [{ data: barbers }, { data: reviews }, { data: reviewLinks }] = await Promise.all([

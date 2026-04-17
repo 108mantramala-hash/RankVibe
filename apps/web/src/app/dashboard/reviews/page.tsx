@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase-server';
+import { getSessionBusinessId } from '@/lib/get-session-business';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,14 +8,15 @@ type SentimentFilter = 'all' | 'positive' | 'negative' | 'neutral';
 async function getReviews(sentiment: SentimentFilter) {
   const supabase = createServerClient();
 
-  // Scope to the customer business
-  const { data: businesses } = await supabase
+  const businessId = await getSessionBusinessId();
+  if (!businessId) return { reviews: [], business: null };
+
+  const { data: business } = await supabase
     .from('businesses')
     .select('id, name')
-    .eq('is_customer', true)
-    .limit(1);
+    .eq('id', businessId)
+    .maybeSingle();
 
-  const business = businesses?.[0] ?? null;
   if (!business) return { reviews: [], business: null };
 
   // Also fetch barbers for name lookup

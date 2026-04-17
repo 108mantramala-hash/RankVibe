@@ -1,19 +1,22 @@
 import { createServerClient } from '@/lib/supabase-server';
+import { getSessionBusinessId } from '@/lib/get-session-business';
 import { headers } from 'next/headers';
 import QrClient from './QrClient';
 
-export const revalidate = 0;
+export const dynamic = 'force-dynamic';
 
 async function getQrData() {
   const supabase = createServerClient();
 
-  const { data: businesses } = await supabase
+  const businessId = await getSessionBusinessId();
+  if (!businessId) return { business: null, links: [], barbers: [] };
+
+  const { data: business } = await supabase
     .from('businesses')
     .select('id, name, google_place_id')
-    .eq('is_customer', true)
-    .limit(1);
+    .eq('id', businessId)
+    .maybeSingle();
 
-  const business = businesses?.[0] ?? null;
   if (!business) return { business: null, links: [], barbers: [] };
 
   const [{ data: links }, { data: barbers }] = await Promise.all([
