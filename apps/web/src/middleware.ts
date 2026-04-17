@@ -14,7 +14,9 @@ export async function middleware(req: NextRequest) {
   // Public routes — always allow
   if (
     pathname.startsWith('/login') ||
+    pathname === '/barber/login' ||
     pathname.startsWith('/review') ||
+    pathname.startsWith('/auth') ||
     pathname.startsWith('/api') ||
     pathname === '/'
   ) {
@@ -77,5 +79,6 @@ export const config = {
     '/admin/:path*',
     '/barber/:path*',
     '/login',
+    '/barber/login',
   ],
 };
