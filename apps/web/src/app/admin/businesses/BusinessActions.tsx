@@ -43,7 +43,18 @@ function ActivateModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Activation failed');
-      setResult({ tempPassword: data.tempPassword, ownerEmail: data.ownerEmail });
+      setResult({ tempPassword: data.tempPassword, ownerEmail: email.trim() });
+
+      // Auto-send onboarding email
+      await fetch('/api/admin/onboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId: business.id,
+          ownerEmail: email.trim(),
+          businessName: business.name,
+        }),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
     } finally {
@@ -88,20 +99,20 @@ function ActivateModal({
           ) : (
             <>
               <div className="rounded-xl bg-green-50 border border-green-200 p-4 mb-4">
-                <p className="text-green-800 font-semibold text-sm mb-2">Account created!</p>
+                <p className="text-green-800 font-semibold text-sm mb-2">✓ Account created & invite sent!</p>
                 <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-[var(--muted)]">Email:</span>
-                    <span className="font-mono font-medium">{result.ownerEmail}</span>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-[var(--muted)] shrink-0">Email:</span>
+                    <span className="font-mono font-medium text-right break-all">{result.ownerEmail}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[var(--muted)]">Temp Password:</span>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-[var(--muted)] shrink-0">Temp Password:</span>
                     <span className="font-mono font-bold text-brand-700">{result.tempPassword}</span>
                   </div>
                 </div>
               </div>
               <p className="text-xs text-[var(--muted)] mb-4">
-                Send these credentials to the owner. They should change their password after first login.
+                A welcome email with a setup link has been sent. Keep the temp password as a backup.
               </p>
               <button
                 onClick={() => {
@@ -111,7 +122,7 @@ function ActivateModal({
                 }}
                 className="w-full mb-2 rounded-lg border border-[var(--border)] text-sm py-2 hover:bg-[var(--background)] transition-colors"
               >
-                Copy to Clipboard
+                Copy Credentials
               </button>
               <button
                 onClick={() => { onClose(); window.location.reload(); }}
