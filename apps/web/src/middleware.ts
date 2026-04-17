@@ -53,6 +53,16 @@ export async function middleware(req: NextRequest) {
   // /dashboard — shop_owner or super_admin
   if (pathname.startsWith('/dashboard')) {
     if (role !== 'shop_owner' && role !== 'super_admin') {
+      // Barbers get redirected to their own portal
+      if (role === 'barber') return NextResponse.redirect(new URL('/barber', req.url));
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
+    return res;
+  }
+
+  // /barber — barber role only
+  if (pathname.startsWith('/barber')) {
+    if (role !== 'barber' && role !== 'super_admin') {
       return NextResponse.redirect(new URL('/login', req.url));
     }
     return res;
@@ -65,6 +75,7 @@ export const config = {
   matcher: [
     '/dashboard/:path*',
     '/admin/:path*',
+    '/barber/:path*',
     '/login',
   ],
 };

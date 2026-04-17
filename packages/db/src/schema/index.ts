@@ -71,6 +71,8 @@ export const businesses = pgTable(
     googleReviewCount: integer('google_review_count'),
     isTracked: boolean('is_tracked').notNull().default(false),
     isCustomer: boolean('is_customer').notNull().default(false),
+    // Shared Google Calendar ID for the shop (used to fetch appointments per barber)
+    googleCalendarId: text('google_calendar_id'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
