@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const navItems = [
   { label: 'Overview', href: '/dashboard' },
@@ -18,6 +19,13 @@ const navItems = [
 function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [businessName, setBusinessName] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => setBusinessName(d.businessName ?? null));
+  }, []);
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -31,7 +39,7 @@ function Sidebar() {
         <h2 className="text-xl font-bold">
           Rank<span className="text-brand-500">Vibe</span>
         </h2>
-        <p className="text-xs text-[var(--muted)] mt-1">Outkasts Barbershop</p>
+        <p className="text-xs text-[var(--muted)] mt-1">{businessName ?? '…'}</p>
       </div>
       <nav className="space-y-1 flex-1">
         {navItems.map((item) => {

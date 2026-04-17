@@ -42,10 +42,21 @@ export async function GET(_req: NextRequest) {
     .eq('id', session.user.id)
     .maybeSingle();
 
+  let businessName: string | null = null;
+  if (user?.business_id) {
+    const { data: biz } = await adminClient
+      .from('businesses')
+      .select('name')
+      .eq('id', user.business_id)
+      .maybeSingle();
+    businessName = biz?.name ?? null;
+  }
+
   return NextResponse.json({
     id: session.user.id,
     email: session.user.email,
     role: user?.role ?? null,
     businessId: user?.business_id ?? null,
+    businessName,
   });
 }
