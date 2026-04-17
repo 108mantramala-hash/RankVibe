@@ -230,23 +230,66 @@ function EditModal({
 // ── Business Row Actions ────────────────────────────────────
 export function BusinessRowActions({ business }: { business: Business }) {
   const [modal, setModal] = useState<'activate' | 'edit' | null>(null);
+  const [onboarding, setOnboarding] = useState(false);
+  const [onboarded, setOnboarded] = useState(false);
+  const [onboardError, setOnboardError] = useState('');
+
+  async function handleOnboard() {
+    if (!business.owner_email) return;
+    setOnboarding(true);
+    setOnboardError('');
+    const res = await fetch('/api/admin/onboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        businessId: business.id,
+        ownerEmail: business.owner_email,
+        businessName: business.name,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setOnboardError(data.error ?? 'Failed to send');
+    } else {
+      setOnboarded(true);
+      setTimeout(() => setOnboarded(false), 3000);
+    }
+    setOnboarding(false);
+  }
 
   return (
     <>
-      <div className="flex items-center gap-2 justify-end">
-        <button
-          onClick={() => setModal('edit')}
-          className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--background)] transition-colors"
-        >
-          Edit
-        </button>
-        {!business.is_customer && (
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-2 justify-end">
           <button
-            onClick={() => setModal('activate')}
-            className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition-colors"
+            onClick={() => setModal('edit')}
+            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--background)] transition-colors"
           >
-            Activate
+            Edit
           </button>
+          {!business.is_customer ? (
+            <button
+              onClick={() => setModal('activate')}
+              className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition-colors"
+            >
+              Activate
+            </button>
+          ) : business.owner_email ? (
+            <button
+              onClick={handleOnboard}
+              disabled={onboarding || onboarded}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                onboarded
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white'
+              } disabled:opacity-60`}
+            >
+              {onboarded ? '✓ Sent' : onboarding ? 'Sending…' : '✉️ Onboard'}
+            </button>
+          ) : null}
+        </div>
+        {onboardError && (
+          <p className="text-xs text-red-500">{onboardError}</p>
         )}
       </div>
 
