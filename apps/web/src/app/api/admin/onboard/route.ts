@@ -1,43 +1,22 @@
 /**
  * POST /api/admin/onboard
- * Generates a Supabase password-reset (magic) link for a shop owner
- * and sends a branded welcome/onboarding email via Resend.
+ * Sends a branded welcome email to a shop owner with their temp password.
+ * tempPassword is passed from the activate flow — no reset link needed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: NextRequest) {
-  const { businessId, ownerEmail, businessName } = await req.json();
+  const { businessId, ownerEmail, businessName, tempPassword } = await req.json();
 
   if (!businessId || !ownerEmail || !businessName) {
     return NextResponse.json({ error: 'businessId, ownerEmail, and businessName required' }, { status: 400 });
   }
 
-  const adminClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-
-  // Generate a password reset link — owner clicks it to set their own password
-  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-    type: 'recovery',
-    email: ownerEmail,
-    options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://rankvibe.org'}/dashboard`,
-    },
-  });
-
-  if (linkError || !linkData?.properties?.action_link) {
-    console.error('[onboard] generateLink error:', linkError);
-    return NextResponse.json({ error: linkError?.message ?? 'Failed to generate link' }, { status: 500 });
-  }
-
-  const resetLink = linkData.properties.action_link;
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://rankvibe.org'}/login`;
   const from = process.env.RESEND_FROM ?? 'noreply@rankvibe.org';
 
   const { error: emailError } = await resend.emails.send({
@@ -63,17 +42,30 @@ export async function POST(req: NextRequest) {
             <h2 style="margin: 0 0 12px; font-size: 20px; color: #111827;">Welcome aboard! 👋</h2>
             <p style="color: #6b7280; line-height: 1.6; margin: 0 0 24px;">
               Your RankVibe dashboard for <strong style="color: #111827;">${businessName}</strong> is ready.
-              Click the button below to set your password and access your account.
+              Sign in with the credentials below, then change your password from Settings.
             </p>
 
+            <!-- Credentials box -->
+            <div style="background: #f3f4f6; border-radius: 10px; padding: 20px 24px; margin-bottom: 24px;">
+              <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #374151;">Your login details:</p>
+              <p style="margin: 0 0 6px; font-size: 13px; color: #6b7280;">
+                <strong style="color: #111827;">Email:</strong> ${ownerEmail}
+              </p>
+              ${tempPassword ? `
+              <p style="margin: 0; font-size: 13px; color: #6b7280;">
+                <strong style="color: #111827;">Temp Password:</strong>
+                <span style="font-family: monospace; font-size: 15px; font-weight: 700; color: #4f46e5; letter-spacing: 1px;">${tempPassword}</span>
+              </p>
+              ` : ''}
+            </div>
+
             <!-- CTA -->
-            <a href="${resetLink}" style="display: inline-block; background: #4f46e5; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 15px;">
-              Set Up My Account →
+            <a href="${loginUrl}" style="display: inline-block; background: #4f46e5; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+              Sign In to Dashboard →
             </a>
 
-            <p style="color: #9ca3af; font-size: 13px; margin: 24px 0 16px;">
-              This link expires in 24 hours. Once you set your password, you can sign in at any time at
-              <a href="https://rankvibe.org/login" style="color: #4f46e5;">rankvibe.org/login</a>.
+            <p style="color: #9ca3af; font-size: 13px; margin: 24px 0 16px; line-height: 1.6;">
+              After signing in, go to <strong>Settings</strong> to change your password.
             </p>
 
             <!-- What's inside -->
@@ -81,7 +73,7 @@ export async function POST(req: NextRequest) {
               <div style="padding: 14px 20px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
                 <p style="margin: 0; font-size: 13px; font-weight: 600; color: #374151;">What's waiting for you:</p>
               </div>
-              <div style="padding: 16px 20px; space-y: 8px;">
+              <div style="padding: 16px 20px;">
                 <p style="margin: 0 0 8px; font-size: 13px; color: #6b7280;">📊 <strong>Overview</strong> — ratings, sentiment trends, and competitor rank</p>
                 <p style="margin: 0 0 8px; font-size: 13px; color: #6b7280;">⭐ <strong>Reviews</strong> — all your Google reviews in one place</p>
                 <p style="margin: 0 0 8px; font-size: 13px; color: #6b7280;">✂️ <strong>Barbers</strong> — per-barber performance and QR codes</p>

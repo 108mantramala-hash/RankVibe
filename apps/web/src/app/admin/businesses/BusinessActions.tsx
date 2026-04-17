@@ -45,7 +45,7 @@ function ActivateModal({
       if (!res.ok) throw new Error(data.error ?? 'Activation failed');
       setResult({ tempPassword: data.tempPassword, ownerEmail: email.trim() });
 
-      // Auto-send onboarding email
+      // Auto-send onboarding email with temp password
       await fetch('/api/admin/onboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,6 +53,7 @@ function ActivateModal({
           businessId: business.id,
           ownerEmail: email.trim(),
           businessName: business.name,
+          tempPassword: data.tempPassword,
         }),
       });
     } catch (e) {
