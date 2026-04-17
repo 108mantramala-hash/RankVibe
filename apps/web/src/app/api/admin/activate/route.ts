@@ -36,7 +36,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Business not found' }, { status: 404 });
   }
 
-  // 2. Create Supabase Auth user
+  // 2. Check email isn't already used by a barber on a different business
+  const { data: existingBarber } = await supabase
+    .from('barbers')
+    .select('id, business_id')
+    .eq('email', ownerEmail)
+    .maybeSingle();
+
+  if (existingBarber && existingBarber.business_id !== businessId) {
+    return NextResponse.json({
+      error: 'This email is already registered as a barber at another business.',
+    }, { status: 409 });
+  }
+
+  // Check email isn't already a shop_owner on a different business
+  const { data: existingOwner } = await supabase
+    .from('users')
+    .select('id, business_id, role')
+    .eq('email', ownerEmail)
+    .maybeSingle();
+
+  if (existingOwner && existingOwner.role === 'shop_owner' && existingOwner.business_id !== businessId) {
+    return NextResponse.json({
+      error: 'This email is already a shop owner for another business.',
+    }, { status: 409 });
+  }
+
+  // 4. Create Supabase Auth user
   const authClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -58,7 +84,7 @@ export async function POST(req: NextRequest) {
 
   const userId = authUser?.user?.id;
 
-  // 3. Upsert users row
+  // 5. Upsert users row
   if (userId) {
     await supabase.from('users').upsert({
       id: userId,
@@ -68,7 +94,7 @@ export async function POST(req: NextRequest) {
     }, { onConflict: 'id' });
   }
 
-  // 4. Mark business as customer
+  // 6. Mark business as customer
   await supabase
     .from('businesses')
     .update({ is_customer: true, updated_at: new Date().toISOString() })

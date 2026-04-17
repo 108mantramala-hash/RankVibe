@@ -213,6 +213,7 @@ export const barbers = pgTable(
     index('barbers_business_id_idx').on(table.businessId),
     index('barbers_user_id_idx').on(table.userId),
     index('barbers_status_idx').on(table.status),
+    uniqueIndex('barbers_email_idx').on(table.email),
   ]
 );
 

@@ -51,6 +51,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'business_id and name are required' }, { status: 400 });
   }
 
+  // Email uniqueness check across barbers + users (owners)
+  if (email) {
+    const [{ data: existingBarber }, { data: existingOwner }] = await Promise.all([
+      supabase.from('barbers').select('id, business_id').eq('email', email).maybeSingle(),
+      supabase.from('users').select('id, role').eq('email', email).maybeSingle(),
+    ]);
+    if (existingBarber) {
+      return NextResponse.json({ error: 'This email is already registered to another barber.' }, { status: 409 });
+    }
+    // Allow if same business owner is also a barber
+    if (existingOwner && existingOwner.role === 'shop_owner') {
+      const { data: ownerBiz } = await supabase.from('users').select('business_id').eq('email', email).maybeSingle();
+      if (ownerBiz?.business_id !== business_id) {
+        return NextResponse.json({ error: 'This email belongs to a shop owner on another business.' }, { status: 409 });
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('barbers')
     .insert({

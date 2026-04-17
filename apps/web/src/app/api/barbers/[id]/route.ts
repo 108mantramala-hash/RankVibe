@@ -24,6 +24,25 @@ export async function PATCH(
     if (key in body) updates[key] = body[key] === '' ? null : body[key];
   }
 
+  // Email uniqueness check — skip if email not being changed
+  if (updates.email) {
+    const email = updates.email as string;
+    const [{ data: existingBarber }, { data: existingOwner }] = await Promise.all([
+      supabase.from('barbers').select('id, business_id').eq('email', email).neq('id', id).maybeSingle(),
+      supabase.from('users').select('id, role, business_id').eq('email', email).maybeSingle(),
+    ]);
+    if (existingBarber) {
+      return NextResponse.json({ error: 'This email is already registered to another barber.' }, { status: 409 });
+    }
+    // Get this barber's business_id to allow owner+barber same email on same biz
+    if (existingOwner && existingOwner.role === 'shop_owner') {
+      const { data: thisBarber } = await supabase.from('barbers').select('business_id').eq('id', id).maybeSingle();
+      if (existingOwner.business_id !== thisBarber?.business_id) {
+        return NextResponse.json({ error: 'This email belongs to a shop owner on another business.' }, { status: 409 });
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('barbers')
     .update(updates)
