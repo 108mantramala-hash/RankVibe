@@ -88,6 +88,74 @@ const EMPTY_FORM: BarberFormData = {
   experience_years: '',
 };
 
+// ── Invite Modal ─────────────────────────────────────────
+
+function InviteModal({
+  barber,
+  onClose,
+}: {
+  barber: Barber;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const inviteUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/barber/login`
+    : 'https://rankvibe.org/barber/login';
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const mailtoBody = encodeURIComponent(
+    `Hi ${barber.known_as || barber.name.split(' ')[0]},\n\nYou've been added to RankVibe — your barber dashboard is ready.\n\nClick the link below to sign in using your Google account:\n${inviteUrl}\n\nSee you there!`
+  );
+  const mailtoLink = `mailto:${barber.email}?subject=${encodeURIComponent('Your RankVibe Barber Dashboard is Ready')}&body=${mailtoBody}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] w-full max-w-sm shadow-xl">
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold">Invite {barber.known_as || barber.name.split(' ')[0]}</h2>
+            <button onClick={onClose} className="text-[var(--muted)] hover:text-[var(--foreground)] text-lg">✕</button>
+          </div>
+
+          <p className="text-sm text-[var(--muted)]">
+            Share this link so <span className="font-medium text-[var(--foreground)]">{barber.name}</span> can sign in with their Google account.
+          </p>
+
+          {/* Link box */}
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+            <span className="flex-1 text-xs font-mono text-[var(--muted)] truncate">{inviteUrl}</span>
+            <button
+              onClick={handleCopy}
+              className="text-xs px-2 py-1 rounded-md bg-brand-600 text-white hover:bg-brand-700 transition-colors flex-shrink-0"
+            >
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+
+          {/* Email hint */}
+          {barber.email && (
+            <a
+              href={mailtoLink}
+              className="flex items-center justify-center gap-2 w-full text-sm py-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--background)] transition-colors"
+            >
+              ✉️ Send invite email to {barber.email}
+            </a>
+          )}
+
+          <p className="text-xs text-[var(--muted)] text-center">
+            They sign in with Google — no password needed.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── QR Modal ────────────────────────────────────────────
 
 function BarberQrModal({
@@ -212,6 +280,7 @@ function BarberCard({
   onStatusChange,
   onDelete,
   onQr,
+  onInvite,
 }: {
   barber: Barber;
   reviewCount: number;
@@ -221,6 +290,7 @@ function BarberCard({
   onStatusChange: (id: string, status: BarberStatus) => void;
   onDelete: (id: string, name: string) => void;
   onQr: (b: Barber) => void;
+  onInvite: (b: Barber) => void;
 }) {
   const initials = barber.name
     .split(' ')
@@ -302,6 +372,15 @@ function BarberCard({
         >
           QR{qr ? ' ✓' : ''}
         </button>
+        {barber.email && (
+          <button
+            onClick={() => onInvite(barber)}
+            className="text-xs py-1.5 px-2 rounded-md border border-[var(--border)] hover:bg-[var(--background)] transition-colors"
+            title="Send invite link"
+          >
+            ✉️
+          </button>
+        )}
         <button
           onClick={() => onEdit(barber)}
           className="flex-1 text-xs py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--background)] transition-colors"
@@ -665,6 +744,7 @@ export default function BarberClient({
   const [showModal, setShowModal] = useState(false);
   const [editingBarber, setEditingBarber] = useState<Barber | null>(null);
   const [qrBarber, setQrBarber] = useState<Barber | null>(null);
+  const [inviteBarber, setInviteBarber] = useState<Barber | null>(null);
 
   function refresh() {
     router.refresh();
@@ -750,6 +830,7 @@ export default function BarberClient({
                 onStatusChange={handleStatusChange}
                 onDelete={handleDelete}
                 onQr={setQrBarber}
+                onInvite={setInviteBarber}
               />
             ))}
           </div>
@@ -772,6 +853,7 @@ export default function BarberClient({
                 onStatusChange={handleStatusChange}
                 onDelete={handleDelete}
                 onQr={setQrBarber}
+                onInvite={setInviteBarber}
               />
             ))}
           </div>
@@ -788,6 +870,14 @@ export default function BarberClient({
             setShowModal(false);
             refresh();
           }}
+        />
+      )}
+
+      {/* Invite modal */}
+      {inviteBarber && (
+        <InviteModal
+          barber={inviteBarber}
+          onClose={() => setInviteBarber(null)}
         />
       )}
 
