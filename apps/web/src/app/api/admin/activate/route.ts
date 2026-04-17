@@ -62,27 +62,37 @@ export async function POST(req: NextRequest) {
     }, { status: 409 });
   }
 
-  // 4. Create Supabase Auth user
   const authClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  const { data: authUser, error: authError } = await authClient.auth.admin.createUser({
-    email: ownerEmail,
-    password: tempPassword,
-    email_confirm: true, // skip email verification
-  });
+  // 4. Check if auth user already exists — if so, reset password instead of creating
+  const { data: { users: existingAuthUsers } } = await authClient.auth.admin.listUsers();
+  const existingAuthUser = existingAuthUsers.find(u => u.email === ownerEmail);
 
-  if (authError) {
-    // If user already exists in auth, look them up
-    if (!authError.message.includes('already')) {
+  let userId: string | undefined;
+
+  if (existingAuthUser) {
+    // Reset password for existing auth user — keeps everything else intact
+    await authClient.auth.admin.updateUserById(existingAuthUser.id, {
+      password: tempPassword,
+      email_confirm: true,
+    });
+    userId = existingAuthUser.id;
+  } else {
+    // Create new auth user
+    const { data: authUser, error: authError } = await authClient.auth.admin.createUser({
+      email: ownerEmail,
+      password: tempPassword,
+      email_confirm: true,
+    });
+    if (authError) {
       return NextResponse.json({ error: `Auth error: ${authError.message}` }, { status: 500 });
     }
+    userId = authUser?.user?.id;
   }
-
-  const userId = authUser?.user?.id;
 
   // 5. Upsert users row
   if (userId) {
