@@ -121,6 +121,7 @@ export default async function BarbersPage() {
       <BarberClient
         initialBarbers={barbers}
         businessId={business.id}
+        shopName={business.name}
         barberStats={barberStats}
         qrByBarber={qrByBarber}
         shopGoogleUrl={shopGoogleUrl}

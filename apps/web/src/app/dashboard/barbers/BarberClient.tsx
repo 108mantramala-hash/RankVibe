@@ -92,12 +92,17 @@ const EMPTY_FORM: BarberFormData = {
 
 function InviteModal({
   barber,
+  shopName,
   onClose,
 }: {
   barber: Barber;
+  shopName: string;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState('');
   const inviteUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/barber/login`
     : 'https://rankvibe.org/barber/login';
@@ -108,10 +113,26 @@ function InviteModal({
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const mailtoBody = encodeURIComponent(
-    `Hi ${barber.known_as || barber.name.split(' ')[0]},\n\nYou've been added to RankVibe — your barber dashboard is ready.\n\nClick the link below to sign in using your Google account:\n${inviteUrl}\n\nSee you there!`
-  );
-  const mailtoLink = `mailto:${barber.email}?subject=${encodeURIComponent('Your RankVibe Barber Dashboard is Ready')}&body=${mailtoBody}`;
+  async function handleSendEmail() {
+    setSending(true);
+    setSendError('');
+    const res = await fetch('/api/barbers/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        barberName: barber.name,
+        barberEmail: barber.email,
+        shopName,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setSendError(data.error ?? 'Failed to send email');
+    } else {
+      setSent(true);
+    }
+    setSending(false);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
@@ -123,7 +144,7 @@ function InviteModal({
           </div>
 
           <p className="text-sm text-[var(--muted)]">
-            Share this link so <span className="font-medium text-[var(--foreground)]">{barber.name}</span> can sign in with their Google account.
+            Send <span className="font-medium text-[var(--foreground)]">{barber.name}</span> their login link via email.
           </p>
 
           {/* Link box */}
@@ -137,14 +158,25 @@ function InviteModal({
             </button>
           </div>
 
-          {/* Email hint */}
+          {/* Send email */}
           {barber.email && (
-            <a
-              href={mailtoLink}
-              className="flex items-center justify-center gap-2 w-full text-sm py-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--background)] transition-colors"
-            >
-              ✉️ Send invite email to {barber.email}
-            </a>
+            sent ? (
+              <div className="flex items-center justify-center gap-2 w-full text-sm py-2.5 rounded-lg bg-green-50 border border-green-200 text-green-700 font-medium">
+                ✓ Invite sent to {barber.email}
+              </div>
+            ) : (
+              <button
+                onClick={handleSendEmail}
+                disabled={sending}
+                className="flex items-center justify-center gap-2 w-full text-sm py-2.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-60"
+              >
+                {sending ? 'Sending…' : `✉️ Send invite to ${barber.email}`}
+              </button>
+            )
+          )}
+
+          {sendError && (
+            <p className="text-xs text-red-500 text-center">{sendError}</p>
           )}
 
           <p className="text-xs text-[var(--muted)] text-center">
@@ -730,12 +762,14 @@ function BarberModal({
 export default function BarberClient({
   initialBarbers,
   businessId,
+  shopName,
   barberStats,
   qrByBarber,
   shopGoogleUrl,
 }: {
   initialBarbers: Barber[];
   businessId: string;
+  shopName: string;
   barberStats: Record<string, { reviewCount: number; avgRating: number | null }>;
   qrByBarber: Record<string, QrLink>;
   shopGoogleUrl: string;
@@ -877,6 +911,7 @@ export default function BarberClient({
       {inviteBarber && (
         <InviteModal
           barber={inviteBarber}
+          shopName={shopName}
           onClose={() => setInviteBarber(null)}
         />
       )}
