@@ -267,14 +267,14 @@ export function BusinessRowActions({ business }: { business: Business }) {
           >
             Edit
           </button>
-          {!business.is_customer ? (
+          {!business.owner_email ? (
             <button
               onClick={() => setModal('activate')}
               className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition-colors"
             >
-              Activate
+              {business.is_customer ? 'Set Owner' : 'Activate'}
             </button>
-          ) : business.owner_email ? (
+          ) : (
             <button
               onClick={handleOnboard}
               disabled={onboarding || onboarded}
@@ -286,7 +286,7 @@ export function BusinessRowActions({ business }: { business: Business }) {
             >
               {onboarded ? '✓ Sent' : onboarding ? 'Sending…' : '✉️ Onboard'}
             </button>
-          ) : null}
+          )}
         </div>
         {onboardError && (
           <p className="text-xs text-red-500">{onboardError}</p>
